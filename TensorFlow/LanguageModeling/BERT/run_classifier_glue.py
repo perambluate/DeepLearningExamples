@@ -32,7 +32,7 @@ import time
 from utils.utils import LogEvalRunHook, LogTrainRunHook
 import utils.dllogger_class
 from dllogger import Verbosity
-from utils.create_glue_data import *
+from utils.create_glue_data_modified import *
 import numpy as np
 from scipy.stats import spearmanr, spearmanr
 
