@@ -680,7 +680,7 @@ def main(_):
   if FLAGS.do_predict and master_process:
     test_times = 1
     if task_name == 'mnli':
-      eval_times = 3
+      test_times = 3
       mnli_tests = ["m_predict", "mm_predict", "d_predict"]
       mnli_predict_outputs = ["{:s}_test_results.tsv".format(name) for name in mnli_tests]
       mnli_predict_examples = processor.get_test_examples(FLAGS.data_dir)
