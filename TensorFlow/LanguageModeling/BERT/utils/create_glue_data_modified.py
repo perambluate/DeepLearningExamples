@@ -336,8 +336,6 @@ class QQPProcessor(DataProcessor):
           text_a = tokenization.convert_to_unicode(line[3])
           text_b = tokenization.convert_to_unicode(line[4])
           label = tokenization.convert_to_unicode(line[5])
-        else:
-          continue
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
