@@ -695,7 +695,7 @@ def main(_):
     else:
       predict_examples = processor.get_test_examples(FLAGS.data_dir)
       predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
-      output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
+      output_predict_file = os.path.join(FLAGS.output_dir, "predict_results.tsv")
 
     while(test_times):
       if is_mnli:
@@ -703,7 +703,7 @@ def main(_):
         predict_examples = mnli_predict_examples[3 - test_times]
         predict_file = os.path.join(FLAGS.output_dir, "{:s}.record".format(mnli_test_set))
         output_predict_file = os.path.join(FLAGS.output_dir, 
-                                    "{:s}_test_results.tsv".format(mnli_test_set))
+                                    "{:s}_results.tsv".format(mnli_test_set))
       file_based_convert_examples_to_features(predict_examples, label_list,
                                   FLAGS.max_seq_length, tokenizer, predict_file)
 
