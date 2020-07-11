@@ -424,8 +424,8 @@ class MNLIProcessor(DataProcessor):
       # if set_type == "test":
         label = "contradiction"
       elif set_type == "diagnostic":
-        text_a = tokenization.convert_to_unicode(line[8])
-        text_b = tokenization.convert_to_unicode(line[9])
+        text_a = tokenization.convert_to_unicode(line[1])
+        text_b = tokenization.convert_to_unicode(line[2])
         label = "contradiction"
       else:
         label = tokenization.convert_to_unicode(line[-1])
