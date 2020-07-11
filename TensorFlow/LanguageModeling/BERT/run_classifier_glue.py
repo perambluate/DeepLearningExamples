@@ -207,16 +207,16 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
     logits = tf.matmul(output_layer, output_weights, transpose_b=True)
     logits = tf.nn.bias_add(logits, output_bias, name='cls_logits')
-		if (num_labels > 1):
-			probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
-			log_probs = tf.nn.log_softmax(logits, axis=-1)
-			one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
-			per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1, name='cls_per_example_loss')
-			loss = tf.reduce_mean(per_example_loss, name='cls_loss')
-		else:
-			probabilities = tf.sigmoid(logits) * 5.
-			per_example_loss = tf.nn.l2_loss(labels, logits, name='cls_per_example_loss') * 2
-			loss = tf.reduce_mean(per_example_loss, name='cls_loss')
+    if (num_labels > 1):
+      probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
+      log_probs = tf.nn.log_softmax(logits, axis=-1)
+      one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
+      per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1, name='cls_per_example_loss')
+      loss = tf.reduce_mean(per_example_loss, name='cls_loss')
+    else:
+      probabilities = tf.sigmoid(logits) * 5.
+      per_example_loss = tf.nn.l2_loss(labels, logits, name='cls_per_example_loss') * 2
+      loss = tf.reduce_mean(per_example_loss, name='cls_loss')
 
     return (loss, per_example_loss, logits, probabilities)
 
@@ -295,21 +295,21 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
 
             MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
             MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
-						metrics = {"MCC": (MCC, MCC_op)}
+            metrics = {"MCC": (MCC, MCC_op)}
             # return {"MCC": (MCC, MCC_op)}
-				elif task_name == "stsb":
-						pearsonr, _ = pearsonr(label_ids, predictions)
-						spearmanr, _ = spearmanr(label_ids, predictions)
-						metrics = {"pear": pearsonr, "spear": spearmanr}
+        elif task_name == "stsb":
+            pearsonr, _ = pearsonr(label_ids, predictions)
+            spearmanr, _ = spearmanr(label_ids, predictions)
+            metrics = {"pear": pearsonr, "spear": spearmanr}
         else:
             accuracy = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
             loss = tf.metrics.mean(values=per_example_loss)
-						metrics = {"eval_accuracy": accuracy, "eval_loss": loss,}
-						if task_name in ["qqp", "mrpc"]:
-							recall = tf.metrics.recall(labels=label_ids, predictions=predictions)
-							metrics["F1_score"] = 2 * accuracy * recall / (accuracy + recall)
-				return metrics
+            metrics = {"eval_accuracy": accuracy, "eval_loss": loss,}
+            if task_name in ["qqp", "mrpc"]:
+              recall = tf.metrics.recall(labels=label_ids, predictions=predictions)
+              metrics["F1_score"] = 2 * accuracy * recall / (accuracy + recall)
+        return metrics
             # return {
             #     "eval_accuracy": accuracy,
             #     "eval_loss": loss,
@@ -343,7 +343,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
                 loss=total_loss,
                 eval_metric_ops=eval_metric_ops)
         return output_spec
-	
+  
     (total_loss, per_example_loss, logits, probabilities) = create_model(
         bert_config, is_training, input_ids, input_mask, segment_ids, label_ids,
         num_labels, use_one_hot_embeddings)
@@ -382,8 +382,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           loss=total_loss,
           eval_metric_ops=eval_metric_ops)
     else:
-			predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-			output_spec = tf.estimator.EstimatorSpec(
+      predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+      output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=predictions)
       # output_spec = tf.estimator.EstimatorSpec(
       #     mode=mode, predictions=probabilities)
@@ -695,13 +695,13 @@ def main(_):
         output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
         with tf.io.gfile.GFile(output_predict_file, "w") as writer:
             tf.compat.v1.logging.info("***** Predict results *****")
-						output_line = "index\tprediction\n"
-						i = 0
+            output_line = "index\tprediction\n"
+            i = 0
             for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks,
                                                 yield_single_examples=False):
-								label = label_list[prediction]
-								output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
-								i += 1
+                label = label_list[prediction]
+                output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
+                i += 1
                 # output_line = "\t".join(
                 #     str(class_probability) for class_probability in prediction) + "\n"
                 writer.write(output_line)
