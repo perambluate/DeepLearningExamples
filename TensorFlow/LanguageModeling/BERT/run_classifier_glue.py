@@ -604,7 +604,7 @@ def main(_):
     eval_examples = [processor.get_dev_examples(FLAGS.data_dir)]
     eval_files = [os.path.join(FLAGS.output_dir, name) for name in record_files]
 
-    for (eval_example, eval_file) in (eval_examples, eval_files):
+    for (eval_example, eval_file) in zip(eval_examples, eval_files):
         file_based_convert_examples_to_features(
             eval_example, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
 
@@ -672,7 +672,7 @@ def main(_):
     predict_examples = [processor.get_test_examples(FLAGS.data_dir)]
     predict_files = [os.path.join(FLAGS.output_dir, "predict.tf_record") for name in record_files]
 
-    for (predict_example, predict_file) in (predict_examples, predict_files):
+    for (predict_example, predict_file) in zip(predict_examples, predict_files):
         file_based_convert_examples_to_features(predict_example, label_list,
                                                 FLAGS.max_seq_length, tokenizer,
                                                 predict_file)
