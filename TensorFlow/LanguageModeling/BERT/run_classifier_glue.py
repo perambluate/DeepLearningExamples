@@ -34,7 +34,7 @@ import utils.dllogger_class
 from dllogger import Verbosity
 from utils.create_glue_data_modified import *
 import numpy as np
-from scipy.stats import spearmanr, spearmanr
+from scipy.stats import pearsonr, spearmanr
 
 flags = tf.flags
 
@@ -602,7 +602,7 @@ def main(_):
   if FLAGS.do_eval and master_process:
     record_files = ["eval.tf_record"] if task_name != 'mnli' else ["m_eval.tf_record", "mm_eval.tf_record"]
     eval_examples = [processor.get_dev_examples(FLAGS.data_dir)]
-    eval_files = [os.path.join(FLAGS.output_dir, name), for name in record_files]
+    eval_files = [os.path.join(FLAGS.output_dir, name) for name in record_files]
 
     for (eval_example, eval_file) in (eval_examples, eval_files):
         file_based_convert_examples_to_features(
@@ -661,11 +661,11 @@ def main(_):
 
         output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
         with tf.io.gfile.GFile(output_eval_file, "w") as writer:
-        tf.compat.v1.logging.info("***** Eval results *****")
-        for key in sorted(result.keys()):
-            dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
-            tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
-            writer.write("%s = %s\n" % (key, str(result[key])))
+          tf.compat.v1.logging.info("***** Eval results *****")
+          for key in sorted(result.keys()):
+              dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
+              tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
+              writer.write("%s = %s\n" % (key, str(result[key])))
 
   if FLAGS.do_predict and master_process:
     record_files = ["predict.tf_record"] if task_name != 'mnli' else ["m_predict.tf_record", "mm_predict.tf_record", "d_predict.tf_record"]

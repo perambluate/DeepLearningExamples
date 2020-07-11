@@ -28,11 +28,9 @@ import tensorflow as tf
 import horovod.tensorflow as hvd
 import time
 import csv
-# IMDB processor
 import pandas as pd
 import numpy as np
 import re
-# Calculate F1
 
 flags = tf.flags
 FLAGS = None
@@ -552,7 +550,7 @@ class SSTProcessor(DataProcessor):
         text_a = tokenization.convert_to_unicode(line[0])
         label = tokenization.convert_to_unicode(line[1])
       examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+          InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
 class RTEProcessor(DataProcessor):
@@ -592,7 +590,7 @@ class RTEProcessor(DataProcessor):
         text_a = tokenization.convert_to_unicode(line[0])
         label = tokenization.convert_to_unicode(line[1])
       examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+          InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
 class QNLIProcessor(DataProcessor):
@@ -921,10 +919,16 @@ def file_based_convert_examples_to_features(
 
 def main():
     processors = {
-        "cola": ColaProcessor,
-        "mnli": MnliProcessor,
-        "mrpc": MrpcProcessor,
-        "xnli": XnliProcessor,
+      "qqp": QQPProcessor,
+      "snli": SNLIProcessor,
+      "stsb": STSBProcessor,
+      "sst": SSTProcessot,
+      "rte": RTEProcessor,
+      "qnli": QNLIProcessor,
+      "wnli": WNLIProcessor,
+      "cola": ColaProcessor,
+      "mnli": MnliProcessor,
+      "mrpc": MrpcProcessor,
     }
     task_name = FLAGS.task_name.lower()
     if task_name not in processors:
