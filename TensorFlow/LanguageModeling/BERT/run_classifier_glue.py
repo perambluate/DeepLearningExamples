@@ -382,7 +382,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           loss=total_loss,
           eval_metric_ops=eval_metric_ops)
     else:
-      predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+      predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=predictions)
       # output_spec = tf.estimator.EstimatorSpec(
