@@ -603,16 +603,19 @@ def main(_):
     eval_times = 1
     if task_name == 'mnli':
       eval_times = 2
-      eval_record_files = ["m_eval.tf_record", "mm_eval.tf_record"]
+      muli_evals = ["m_eval", "mm_eval"]
+      mnli_eval_outputs = ["{:s}.txt".format(name) for name in muli_evals]
       mnli_eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-      mnli_eval_files = [os.path.join(FLAGS.output_dir, name) for name in eval_record_files]
+      mnli_eval_records = ["{:s}.tf_record".format(name) for name in muli_evals]
     else:
       eval_examples = processor.get_dev_examples(FLAGS.data_dir)
       eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+      output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
     while(eval_times):
       if task_name == 'mnli':
         eval_examples = mnli_eval_examples[2 - eval_times]
-        eval_file = mnli_eval_files[2 - eval_times]
+        eval_file = mnli_eval_records[2 - eval_times]
+        output_eval_file = mnli_eval_outputs[2 - eval_times]
       file_based_convert_examples_to_features(eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
       tf.compat.v1.logging.info("***** Running evaluation *****")
       tf.compat.v1.logging.info("  Num examples = %d", len(eval_examples))
@@ -665,7 +668,7 @@ def main(_):
       tf.compat.v1.logging.info("-----------------------------")
 
 
-      output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+      # output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
       with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
         tf.compat.v1.logging.info("***** Eval results *****")
         for key in sorted(result.keys()):
@@ -678,17 +681,21 @@ def main(_):
     test_times = 1
     if task_name == 'mnli':
       eval_times = 3
-      record_files = ["m_predict.tf_record", "mm_predict.tf_record", "d_predict.tf_record"]
+      mnli_tests = ["m_predict", "mm_predict", "d_predict"]
+      mnli_predict_outputs = ["{:s}_test_results.tsv".format(name) for name in mnli_tests]
       mnli_predict_examples = processor.get_test_examples(FLAGS.data_dir)
-      mnli_predict_files = [os.path.join(FLAGS.output_dir, name) for name in record_files]
+      mnli_predict_records = ["{:s}.record".format(name) for name in mnli_tests]
     
-    predict_examples = processor.get_test_examples(FLAGS.data_dir)
-    predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
+    else:
+      predict_examples = processor.get_test_examples(FLAGS.data_dir)
+      predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
+      output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
 
     while(test_times):
       if task_name == 'mnli':
         predict_examples = mnli_predict_examples[3 - test_times]
-        predict_file = mnli_predict_files[3 - test_times]
+        predict_file = mnli_predict_records[3 - test_times]
+        output_predict_file = mnli_predict_outputs[3 - test_times]
       file_based_convert_examples_to_features(predict_examples, label_list,
                                   FLAGS.max_seq_length, tokenizer, predict_file)
 
@@ -707,18 +714,21 @@ def main(_):
       predict_hooks = [LogEvalRunHook(FLAGS.predict_batch_size)]
       predict_start_time = time.time()
 
-      output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
+      # output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
       with tf.compat.v1.gfile.GFile(output_predict_file, "w") as writer:
           tf.compat.v1.logging.info("***** Predict results *****")
           output_line = "index\tprediction\n"
           i = 0
-          for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks, yield_single_examples=False):
-            # label = label_list[prediction]
-            # output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
-            i += 1
-            tf.compat.v1.logging.info("the %d-th prediction: %s, type: %s" % (i, str(prediction), type(prediction)))
-            output_line = "\t".join(
-                str(class_probability) for class_probability in prediction) + "\n"
+          for predictions in estimator.predict(input_fn=predict_input_fn, 
+                            hooks=predict_hooks, yield_single_examples=False):
+            for class_prediction in predictions:
+              predict_label = label_list[class_prediction]
+              output_line.join("{:d}\t{:s}\n".format(i, 
+                  predict_label if isinstance(predict_label, str) else str(predict_label)))
+              tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
+              i += 1
+            # output_line = "\t".join(
+            #     str(class_probability) for class_probability in prediction) + "\n"
             writer.write(output_line)
       test_times -= 1
 
