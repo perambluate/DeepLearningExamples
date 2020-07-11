@@ -600,146 +600,161 @@ def main(_):
         tf.compat.v1.logging.info("-----------------------------")
 
   if FLAGS.do_eval and master_process:
-    record_files = ["eval.tf_record"] if task_name != 'mnli' else ["m_eval.tf_record", "mm_eval.tf_record"]
-    eval_examples = [processor.get_dev_examples(FLAGS.data_dir)]
-    eval_files = [os.path.join(FLAGS.output_dir, name) for name in record_files]
+    eval_times = 1
+    if task_name == 'mnli':
+      eval_times = 2
+      eval_record_files = ["m_eval.tf_record", "mm_eval.tf_record"]
+      mnli_eval_examples = [processor.get_dev_examples(FLAGS.data_dir)]
+      mnli_eval_files = [os.path.join(FLAGS.output_dir, name) for name in eval_record_files]
+    else:
+      eval_examples = processor.get_dev_examples(FLAGS.data_dir)
+      eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
+    while(eval_times):
+      if task_name == 'mnli':
+        eval_examples = mnli_eval_examples[2 - eval_times]
+        eval_file = mnli_eval_files[2 - eval_times]
+      file_based_convert_examples_to_features(eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
+      tf.compat.v1.logging.info("***** Running evaluation *****")
+      tf.compat.v1.logging.info("  Num examples = %d", len(eval_examples))
+      tf.compat.v1.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
 
-    for (eval_example, eval_file) in zip(eval_examples, eval_files):
-        file_based_convert_examples_to_features(
-            eval_example, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
+      eval_drop_remainder = False
+      eval_input_fn = file_based_input_fn_builder(
+          input_file=eval_file,
+          batch_size=FLAGS.eval_batch_size,
+          seq_length=FLAGS.max_seq_length,
+          is_training=False,
+          drop_remainder=eval_drop_remainder)
 
-        tf.compat.v1.logging.info("***** Running evaluation *****")
-        tf.compat.v1.logging.info("  Num examples = %d", len(eval_example))
-        tf.compat.v1.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
+      eval_hooks = [LogEvalRunHook(FLAGS.eval_batch_size)]
+      eval_start_time = time.time()
+      result = estimator.evaluate(input_fn=eval_input_fn, hooks=eval_hooks)
 
-        eval_drop_remainder = False
-        eval_input_fn = file_based_input_fn_builder(
-            input_file=eval_file,
-            batch_size=FLAGS.eval_batch_size,
-            seq_length=FLAGS.max_seq_length,
-            is_training=False,
-            drop_remainder=eval_drop_remainder)
+      eval_time_elapsed = time.time() - eval_start_time
+      eval_time_wo_overhead = eval_hooks[-1].total_time
 
-        eval_hooks = [LogEvalRunHook(FLAGS.eval_batch_size)]
-        eval_start_time = time.time()
-        result = estimator.evaluate(input_fn=eval_input_fn, hooks=eval_hooks)
+      time_list = eval_hooks[-1].time_list
+      time_list.sort()
+      num_sentences = (eval_hooks[-1].count - eval_hooks[-1].skipped) * FLAGS.eval_batch_size
 
-        eval_time_elapsed = time.time() - eval_start_time
-        eval_time_wo_overhead = eval_hooks[-1].total_time
+      avg = np.mean(time_list)
+      cf_50 = max(time_list[:int(len(time_list) * 0.50)])
+      cf_90 = max(time_list[:int(len(time_list) * 0.90)])
+      cf_95 = max(time_list[:int(len(time_list) * 0.95)])
+      cf_99 = max(time_list[:int(len(time_list) * 0.99)])
+      cf_100 = max(time_list[:int(len(time_list) * 1)])
+      ss_sentences_per_second = num_sentences * 1.0 / eval_time_wo_overhead
 
-        time_list = eval_hooks[-1].time_list
-        time_list.sort()
-        num_sentences = (eval_hooks[-1].count - eval_hooks[-1].skipped) * FLAGS.eval_batch_size
-
-        avg = np.mean(time_list)
-        cf_50 = max(time_list[:int(len(time_list) * 0.50)])
-        cf_90 = max(time_list[:int(len(time_list) * 0.90)])
-        cf_95 = max(time_list[:int(len(time_list) * 0.95)])
-        cf_99 = max(time_list[:int(len(time_list) * 0.99)])
-        cf_100 = max(time_list[:int(len(time_list) * 1)])
-        ss_sentences_per_second = num_sentences * 1.0 / eval_time_wo_overhead
-
-        tf.compat.v1.logging.info("-----------------------------")
-        tf.compat.v1.logging.info("Total Inference Time = %0.2f for Sentences = %d", eval_time_elapsed,
-                        eval_hooks[-1].count * FLAGS.eval_batch_size)
-        tf.compat.v1.logging.info("Total Inference Time W/O Overhead = %0.2f for Sentences = %d", eval_time_wo_overhead,
-                        (eval_hooks[-1].count - eval_hooks[-1].skipped) * FLAGS.eval_batch_size)
-        tf.compat.v1.logging.info("Summary Inference Statistics on EVAL set")
-        tf.compat.v1.logging.info("Batch size = %d", FLAGS.eval_batch_size)
-        tf.compat.v1.logging.info("Sequence Length = %d", FLAGS.max_seq_length)
-        tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.use_fp16 else "fp32")
-        tf.compat.v1.logging.info("Latency Confidence Level 50 (ms) = %0.2f", cf_50 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 90 (ms) = %0.2f", cf_90 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 95 (ms) = %0.2f", cf_95 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 99 (ms) = %0.2f", cf_99 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
-        tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
-        tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
-        # dllogging.logger.log(step=(), data={"throughput_train": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
-        tf.compat.v1.logging.info("-----------------------------")
+      tf.compat.v1.logging.info("-----------------------------")
+      tf.compat.v1.logging.info("Total Inference Time = %0.2f for Sentences = %d", eval_time_elapsed,
+                    eval_hooks[-1].count * FLAGS.eval_batch_size)
+      tf.compat.v1.logging.info("Total Inference Time W/O Overhead = %0.2f for Sentences = %d", eval_time_wo_overhead,
+                    (eval_hooks[-1].count - eval_hooks[-1].skipped) * FLAGS.eval_batch_size)
+      tf.compat.v1.logging.info("Summary Inference Statistics on EVAL set")
+      tf.compat.v1.logging.info("Batch size = %d", FLAGS.eval_batch_size)
+      tf.compat.v1.logging.info("Sequence Length = %d", FLAGS.max_seq_length)
+      tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.use_fp16 else "fp32")
+      tf.compat.v1.logging.info("Latency Confidence Level 50 (ms) = %0.2f", cf_50 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 90 (ms) = %0.2f", cf_90 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 95 (ms) = %0.2f", cf_95 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 99 (ms) = %0.2f", cf_99 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
+      tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
+      tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
+      # dllogging.logger.log(step=(), data={"throughput_train": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
+      tf.compat.v1.logging.info("-----------------------------")
 
 
-        output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
-          tf.compat.v1.logging.info("***** Eval results *****")
-          for key in sorted(result.keys()):
-              # dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
-              tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
-              writer.write("%s = %s\n" % (key, str(result[key])))
+      output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+      with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
+        tf.compat.v1.logging.info("***** Eval results *****")
+        for key in sorted(result.keys()):
+            # dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
+            tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
+            writer.write("%s = %s\n" % (key, str(result[key])))
+      eval_times -= 1
 
   if FLAGS.do_predict and master_process:
-    record_files = ["predict.tf_record"] if task_name != 'mnli' else ["m_predict.tf_record", "mm_predict.tf_record", "d_predict.tf_record"]
-    predict_examples = [processor.get_test_examples(FLAGS.data_dir)]
-    predict_files = [os.path.join(FLAGS.output_dir, "predict.tf_record") for name in record_files]
+    test_times = 1
+    if task_name == 'mnli':
+      eval_times = 3
+      record_files = ["m_predict.tf_record", "mm_predict.tf_record", "d_predict.tf_record"]
+      mnli_predict_examples = [processor.get_test_examples(FLAGS.data_dir)]
+      mnli_predict_files = [os.path.join(FLAGS.output_dir, name) for name in record_files]
+    
+    predict_examples = processor.get_test_examples(FLAGS.data_dir)
+    predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
 
-    for (predict_example, predict_file) in zip(predict_examples, predict_files):
-        file_based_convert_examples_to_features(predict_example, label_list,
-                                                FLAGS.max_seq_length, tokenizer,
-                                                predict_file)
+    while(test_times):
+      if task_name == 'mnli':
+        predict_examples = mnli_predict_examples[3 - test_times]
+        predict_file = mnli_predict_files[3 - test_times]
+      file_based_convert_examples_to_features(predict_examples, label_list,
+                                  FLAGS.max_seq_length, tokenizer, predict_file)
 
-        tf.compat.v1.logging.info("***** Running prediction*****")
-        tf.compat.v1.logging.info("  Num examples = %d", len(predict_example))
-        tf.compat.v1.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
+      tf.compat.v1.logging.info("***** Running prediction*****")
+      tf.compat.v1.logging.info("  Num examples = %d", len(predict_examples))
+      tf.compat.v1.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
-        predict_drop_remainder = False
-        predict_input_fn = file_based_input_fn_builder(
-            input_file=predict_file,
-            batch_size=FLAGS.predict_batch_size,
-            seq_length=FLAGS.max_seq_length,
-            is_training=False,
-            drop_remainder=predict_drop_remainder)
+      predict_drop_remainder = False
+      predict_input_fn = file_based_input_fn_builder(
+          input_file=predict_file,
+          batch_size=FLAGS.predict_batch_size,
+          seq_length=FLAGS.max_seq_length,
+          is_training=False,
+          drop_remainder=predict_drop_remainder)
 
-        predict_hooks = [LogEvalRunHook(FLAGS.predict_batch_size)]
-        predict_start_time = time.time()
+      predict_hooks = [LogEvalRunHook(FLAGS.predict_batch_size)]
+      predict_start_time = time.time()
 
-        output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-        with tf.compat.v1.gfile.GFile(output_predict_file, "w") as writer:
-            tf.compat.v1.logging.info("***** Predict results *****")
-            output_line = "index\tprediction\n"
-            i = 0
-            for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks,
-                                                yield_single_examples=False):
-                label = label_list[prediction]
-                output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
-                i += 1
-                # output_line = "\t".join(
-                #     str(class_probability) for class_probability in prediction) + "\n"
-                writer.write(output_line)
+      output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
+      with tf.compat.v1.gfile.GFile(output_predict_file, "w") as writer:
+          tf.compat.v1.logging.info("***** Predict results *****")
+          output_line = "index\tprediction\n"
+          i = 0
+          for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks, ield_single_examples=False):
+            label = label_list[prediction]
+            output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
+            i += 1
+            # output_line = "\t".join(
+            #     str(class_probability) for class_probability in prediction) + "\n"
+            writer.write(output_line)
+      test_times -= 1
 
 
-        predict_time_elapsed = time.time() - predict_start_time
-        predict_time_wo_overhead = predict_hooks[-1].total_time
+      predict_time_elapsed = time.time() - predict_start_time
+      predict_time_wo_overhead = predict_hooks[-1].total_time
 
-        time_list = predict_hooks[-1].time_list
-        time_list.sort()
-        num_sentences = (predict_hooks[-1].count - predict_hooks[-1].skipped) * FLAGS.predict_batch_size
+      time_list = predict_hooks[-1].time_list
+      time_list.sort()
+      num_sentences = (predict_hooks[-1].count - predict_hooks[-1].skipped) * FLAGS.predict_batch_size
 
-        avg = np.mean(time_list)
-        cf_50 = max(time_list[:int(len(time_list) * 0.50)])
-        cf_90 = max(time_list[:int(len(time_list) * 0.90)])
-        cf_95 = max(time_list[:int(len(time_list) * 0.95)])
-        cf_99 = max(time_list[:int(len(time_list) * 0.99)])
-        cf_100 = max(time_list[:int(len(time_list) * 1)])
-        ss_sentences_per_second = num_sentences * 1.0 / predict_time_wo_overhead
+      avg = np.mean(time_list)
+      cf_50 = max(time_list[:int(len(time_list) * 0.50)])
+      cf_90 = max(time_list[:int(len(time_list) * 0.90)])
+      cf_95 = max(time_list[:int(len(time_list) * 0.95)])
+      cf_99 = max(time_list[:int(len(time_list) * 0.99)])
+      cf_100 = max(time_list[:int(len(time_list) * 1)])
+      ss_sentences_per_second = num_sentences * 1.0 / predict_time_wo_overhead
 
-        tf.compat.v1.logging.info("-----------------------------")
-        tf.compat.v1.logging.info("Total Inference Time = %0.2f for Sentences = %d", predict_time_elapsed,
-                        predict_hooks[-1].count * FLAGS.predict_batch_size)
-        tf.compat.v1.logging.info("Total Inference Time W/O Overhead = %0.2f for Sentences = %d", predict_time_wo_overhead,
-                        (predict_hooks[-1].count - predict_hooks[-1].skipped) * FLAGS.predict_batch_size)
-        tf.compat.v1.logging.info("Summary Inference Statistics on TEST SET")
-        tf.compat.v1.logging.info("Batch size = %d", FLAGS.predict_batch_size)
-        tf.compat.v1.logging.info("Sequence Length = %d", FLAGS.max_seq_length)
-        tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.use_fp16 else "fp32")
-        tf.compat.v1.logging.info("Latency Confidence Level 50 (ms) = %0.2f", cf_50 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 90 (ms) = %0.2f", cf_90 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 95 (ms) = %0.2f", cf_95 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 99 (ms) = %0.2f", cf_99 * 1000)
-        tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
-        tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
-        tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
-        # dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
-        tf.compat.v1.logging.info("-----------------------------")
+      tf.compat.v1.logging.info("-----------------------------")
+      tf.compat.v1.logging.info("Total Inference Time = %0.2f for Sentences = %d", predict_time_elapsed,
+                    predict_hooks[-1].count * FLAGS.predict_batch_size)
+      tf.compat.v1.logging.info("Total Inference Time W/O Overhead = %0.2f for Sentences = %d", predict_time_wo_overhead,
+                    (predict_hooks[-1].count - predict_hooks[-1].skipped) * FLAGS.predict_batch_size)
+      tf.compat.v1.logging.info("Summary Inference Statistics on TEST SET")
+      tf.compat.v1.logging.info("Batch size = %d", FLAGS.predict_batch_size)
+      tf.compat.v1.logging.info("Sequence Length = %d", FLAGS.max_seq_length)
+      tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.use_fp16 else "fp32")
+      tf.compat.v1.logging.info("Latency Confidence Level 50 (ms) = %0.2f", cf_50 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 90 (ms) = %0.2f", cf_90 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 95 (ms) = %0.2f", cf_95 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 99 (ms) = %0.2f", cf_99 * 1000)
+      tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
+      tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
+      tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
+      # dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
+      tf.compat.v1.logging.info("-----------------------------")
 
 
 if __name__ == "__main__":
