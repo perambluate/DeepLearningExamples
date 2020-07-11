@@ -679,7 +679,7 @@ def main(_):
     if task_name == 'mnli':
       eval_times = 3
       record_files = ["m_predict.tf_record", "mm_predict.tf_record", "d_predict.tf_record"]
-      mnli_predict_examples = [processor.get_test_examples(FLAGS.data_dir)]
+      mnli_predict_examples = processor.get_test_examples(FLAGS.data_dir)
       mnli_predict_files = [os.path.join(FLAGS.output_dir, name) for name in record_files]
     
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
