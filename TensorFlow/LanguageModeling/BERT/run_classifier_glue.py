@@ -725,7 +725,7 @@ def main(_):
               predict_label = label_list[class_prediction]
               output_line.join("{:d}\t{:s}\n".format(i, 
                   predict_label if isinstance(predict_label, str) else str(predict_label)))
-              tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
+              # tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
               i += 1
             # output_line = "\t".join(
             #     str(class_probability) for class_probability in prediction) + "\n"
