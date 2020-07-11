@@ -713,11 +713,12 @@ def main(_):
           output_line = "index\tprediction\n"
           i = 0
           for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks, yield_single_examples=False):
-            label = label_list[prediction]
-            output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
+            # label = label_list[prediction]
+            # output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
             i += 1
-            # output_line = "\t".join(
-            #     str(class_probability) for class_probability in prediction) + "\n"
+            tf.compat.v1.logging.info("the %d-th prediction: %s, type: %s" % (i, str(prediction), type(prediction)))
+            output_line = "\t".join(
+                str(class_probability) for class_probability in prediction) + "\n"
             writer.write(output_line)
       test_times -= 1
 
