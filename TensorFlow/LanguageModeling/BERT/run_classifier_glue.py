@@ -462,9 +462,9 @@ def main(_):
       "rte": RTEProcessor,
       "qnli": QNLIProcessor,
       "wnli": WNLIProcessor,
-      "cola": ColaProcessor,
-      "mnli": MnliProcessor,
-      "mrpc": MrpcProcessor,
+      "cola": CoLAProcessor,
+      "mnli": MNLIProcessor,
+      "mrpc": MRPCProcessor,
   }
 
   if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:

@@ -922,13 +922,13 @@ def main():
       "qqp": QQPProcessor,
       "snli": SNLIProcessor,
       "stsb": STSBProcessor,
-      "sst": SSTProcessot,
+      "sst": SSTProcessor,
       "rte": RTEProcessor,
       "qnli": QNLIProcessor,
       "wnli": WNLIProcessor,
-      "cola": ColaProcessor,
-      "mnli": MnliProcessor,
-      "mrpc": MrpcProcessor,
+      "cola": CoLAProcessor,
+      "mnli": MNLIProcessor,
+      "mrpc": MRPCProcessor,
     }
     task_name = FLAGS.task_name.lower()
     if task_name not in processors:
