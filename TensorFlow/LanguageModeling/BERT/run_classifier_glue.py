@@ -735,8 +735,8 @@ def main(_):
                   predict_label if isinstance(predict_label, str) else str(predict_label)))
               tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
               i += 1
-            output_line = "\t".join(
-                str(class_probability) for class_probability in prediction) + "\n"
+            # output_line = "\t".join(
+            #     str(class_probability) for class_probability in prediction) + "\n"
             writer.write(output_line)
       
       predict_time_elapsed = time.time() - predict_start_time
