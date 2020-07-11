@@ -458,7 +458,7 @@ def main(_):
       "qqp": QQPProcessor,
       "snli": SNLIProcessor,
       "stsb": STSBProcessor,
-      "sst": SSTProcessot,
+      "sst": SSTProcessor,
       "rte": RTEProcessor,
       "qnli": QNLIProcessor,
       "wnli": WNLIProcessor,
