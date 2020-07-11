@@ -604,7 +604,7 @@ def main(_):
     if task_name == 'mnli':
       eval_times = 2
       eval_record_files = ["m_eval.tf_record", "mm_eval.tf_record"]
-      mnli_eval_examples = [processor.get_dev_examples(FLAGS.data_dir)]
+      mnli_eval_examples = processor.get_dev_examples(FLAGS.data_dir)
       mnli_eval_files = [os.path.join(FLAGS.output_dir, name) for name in eval_record_files]
     else:
       eval_examples = processor.get_dev_examples(FLAGS.data_dir)

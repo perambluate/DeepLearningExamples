@@ -395,7 +395,7 @@ class MNLIProcessor(DataProcessor):
         "dev_matched")
     mm_dev_examples = self._create_examples(self._read_tsv(os.path.join(data_dir, "dev_mismatched.tsv")),
         "dev_mismatched")
-    return m_dev_examples, mm_dev_examples
+    return [m_dev_examples, mm_dev_examples]
 
   def get_test_examples(self, data_dir):
     """See base class."""
@@ -405,7 +405,7 @@ class MNLIProcessor(DataProcessor):
         "test_mismatched")
     d_test_examples = self._create_examples(self._read_tsv(os.path.join(data_dir, "diagnostic.tsv")),
         "diagnostic")
-    return m_test_examples, mm_test_examples, d_test_examples
+    return [m_test_examples, mm_test_examples, d_test_examples]
 
   def get_labels(self):
     """See base class."""
