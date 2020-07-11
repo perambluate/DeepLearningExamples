@@ -655,7 +655,7 @@ def main(_):
         tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
         tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
         tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
-        dllogging.logger.log(step=(), data={"throughput_train": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
+        # dllogging.logger.log(step=(), data={"throughput_train": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
         tf.compat.v1.logging.info("-----------------------------")
 
 
@@ -663,7 +663,7 @@ def main(_):
         with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
           tf.compat.v1.logging.info("***** Eval results *****")
           for key in sorted(result.keys()):
-              dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
+              # dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
               tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
               writer.write("%s = %s\n" % (key, str(result[key])))
 
@@ -738,7 +738,7 @@ def main(_):
         tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
         tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
         tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
-        dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
+        # dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
         tf.compat.v1.logging.info("-----------------------------")
 
 
