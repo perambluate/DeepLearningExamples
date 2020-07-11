@@ -270,7 +270,7 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
     print('TRT node count:',
           len([1 for n in frozen_graph.node if str(n.op) == 'TRTEngineOp']))
     
-    with tf.io.gfile.GFile("frozen_modelTRT.pb", "wb") as f:
+    with tf.compat.v1.gfile.GFile("frozen_modelTRT.pb", "wb") as f:
       f.write(frozen_graph.SerializeToString())      
         
   return frozen_graph
@@ -660,7 +660,7 @@ def main(_):
 
 
         output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-        with tf.io.gfile.GFile(output_eval_file, "w") as writer:
+        with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
           tf.compat.v1.logging.info("***** Eval results *****")
           for key in sorted(result.keys()):
               dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
@@ -693,7 +693,7 @@ def main(_):
         predict_start_time = time.time()
 
         output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-        with tf.io.gfile.GFile(output_predict_file, "w") as writer:
+        with tf.compat.v1.gfile.GFile(output_predict_file, "w") as writer:
             tf.compat.v1.logging.info("***** Predict results *****")
             output_line = "index\tprediction\n"
             i = 0
