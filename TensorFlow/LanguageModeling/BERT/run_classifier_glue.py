@@ -616,7 +616,7 @@ def main(_):
       if is_mnli:
         mnli_eval_set = mnli_eval_sets[2 - eval_times]
         eval_examples = mnli_eval_examples[2 - eval_times]
-        eval_file = "{:s}.tf_record".format(mnli_eval_set)
+        eval_file = os.path.join(FLAGS.output_dir,"{:s}.tf_record".format(mnli_eval_set))
         output_eval_file = os.path.join(FLAGS.output_dir, 
                               "{:s}.txt".format(mnli_eval_set))
 
@@ -701,7 +701,7 @@ def main(_):
       if is_mnli:
         mnli_test_set = mnli_test_sets[3 - test_times]
         predict_examples = mnli_predict_examples[3 - test_times]
-        predict_file = "{:s}.record".format(mnli_test_set)
+        predict_file = os.path.join(FLAGS.output_dir, "{:s}.record".format(mnli_test_set))
         output_predict_file = os.path.join(FLAGS.output_dir, 
                                     "{:s}_test_results.tsv".format(mnli_test_set))
       file_based_convert_examples_to_features(predict_examples, label_list,
@@ -733,7 +733,7 @@ def main(_):
               predict_label = label_list[class_prediction]
               output_line += "{:d}\t{:s}\n".format(i, 
                   predict_label if isinstance(predict_label, str) else str(predict_label))
-              tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
+              # tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
               i += 1
             # output_line = "\t".join(
             #     str(class_probability) for class_probability in prediction) + "\n"
