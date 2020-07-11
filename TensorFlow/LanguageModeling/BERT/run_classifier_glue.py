@@ -482,6 +482,7 @@ def main(_):
   tf.io.gfile.makedirs(FLAGS.output_dir)
 
   task_name = FLAGS.task_name.lower()
+  is_mnli = (task_name == 'mnli')
 
   if task_name not in processors:
     raise ValueError("Task not found: %s" % (task_name))
@@ -601,21 +602,23 @@ def main(_):
 
   if FLAGS.do_eval and master_process:
     eval_times = 1
-    if task_name == 'mnli':
+    if is_mnli:
       eval_times = 2
-      muli_evals = ["m_eval", "mm_eval"]
-      mnli_eval_outputs = ["{:s}.txt".format(name) for name in muli_evals]
+      mnli_eval_sets = ["m_eval", "mm_eval"]
+      # mnli_eval_outputs = ["{:s}.txt".format(name) for name in mnli_eval_sets]
+      # mnli_eval_records = ["{:s}.tf_record".format(name) for name in mnli_eval_sets]
       mnli_eval_examples = processor.get_dev_examples(FLAGS.data_dir)
-      mnli_eval_records = ["{:s}.tf_record".format(name) for name in muli_evals]
     else:
       eval_examples = processor.get_dev_examples(FLAGS.data_dir)
       eval_file = os.path.join(FLAGS.output_dir, "eval.tf_record")
       output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
     while(eval_times):
-      if task_name == 'mnli':
+      if is_mnli:
+        mnli_eval_set = mnli_eval_sets[2 - eval_times]
         eval_examples = mnli_eval_examples[2 - eval_times]
-        eval_file = mnli_eval_records[2 - eval_times]
-        output_eval_file = mnli_eval_outputs[2 - eval_times]
+        eval_file = "{:s}.tf_record".format(mnli_eval_set)
+        output_eval_file = "{:s}.txt".format(mnli_eval_set)
+
       file_based_convert_examples_to_features(eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
       tf.compat.v1.logging.info("***** Running evaluation *****")
       tf.compat.v1.logging.info("  Num examples = %d", len(eval_examples))
@@ -675,16 +678,18 @@ def main(_):
             # dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
             tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
+      if is_mnli:
+        tf.compat.v1.logging.info("End of the {:s} set in mnli task.".format(mnli_eval_set))
       eval_times -= 1
 
   if FLAGS.do_predict and master_process:
     test_times = 1
-    if task_name == 'mnli':
+    if is_mnli:
       test_times = 3
-      mnli_tests = ["m_predict", "mm_predict", "d_predict"]
-      mnli_predict_outputs = ["{:s}_test_results.tsv".format(name) for name in mnli_tests]
+      mnli_test_sets = ["m_predict", "mm_predict", "d_predict"]
+      # mnli_predict_outputs = ["{:s}_test_results.tsv".format(name) for name in mnli_test_sets]
+      # mnli_predict_records = ["{:s}.record".format(name) for name in mnli_test_sets]
       mnli_predict_examples = processor.get_test_examples(FLAGS.data_dir)
-      mnli_predict_records = ["{:s}.record".format(name) for name in mnli_tests]
     
     else:
       predict_examples = processor.get_test_examples(FLAGS.data_dir)
@@ -692,10 +697,11 @@ def main(_):
       output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
 
     while(test_times):
-      if task_name == 'mnli':
+      if is_mnli:
+        mnli_test_set = mnli_test_sets[3 - test_times]
         predict_examples = mnli_predict_examples[3 - test_times]
-        predict_file = mnli_predict_records[3 - test_times]
-        output_predict_file = mnli_predict_outputs[3 - test_times]
+        predict_file = "{:s}.record".format(mnli_test_set)
+        output_predict_file = "{:s}_test_results.tsv".format(mnli_test_set)
       file_based_convert_examples_to_features(predict_examples, label_list,
                                   FLAGS.max_seq_length, tokenizer, predict_file)
 
@@ -730,9 +736,7 @@ def main(_):
             # output_line = "\t".join(
             #     str(class_probability) for class_probability in prediction) + "\n"
             writer.write(output_line)
-      test_times -= 1
-
-
+      
       predict_time_elapsed = time.time() - predict_start_time
       predict_time_wo_overhead = predict_hooks[-1].total_time
 
@@ -766,6 +770,10 @@ def main(_):
       tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
       # dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
       tf.compat.v1.logging.info("-----------------------------")
+
+      if is_mnli:
+        tf.compat.v1.logging.info("End of the {:s} set in mnli task.".format(mnli_test_set))
+      test_times -= 1
 
 
 if __name__ == "__main__":
