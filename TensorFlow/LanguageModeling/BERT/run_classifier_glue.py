@@ -712,7 +712,7 @@ def main(_):
           tf.compat.v1.logging.info("***** Predict results *****")
           output_line = "index\tprediction\n"
           i = 0
-          for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks, ield_single_examples=False):
+          for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks, yield_single_examples=False):
             label = label_list[prediction]
             output_line += "{:s}\t{:s}\n".format(str(i), label if isinstance(label, str) else str(label))
             i += 1
