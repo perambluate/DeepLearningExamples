@@ -731,8 +731,8 @@ def main(_):
                             hooks=predict_hooks, yield_single_examples=False):
             for class_prediction in predictions:
               predict_label = label_list[class_prediction]
-              output_line.join("{:d}\t{:s}\n".format(i, 
-                  predict_label if isinstance(predict_label, str) else str(predict_label)))
+              output_line += "{:d}\t{:s}\n".format(i, 
+                  predict_label if isinstance(predict_label, str) else str(predict_label))
               tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
               i += 1
             # output_line = "\t".join(
