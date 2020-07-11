@@ -30,8 +30,8 @@ import tensorflow as tf
 import horovod.tensorflow as hvd
 import time
 from utils.utils import LogEvalRunHook, LogTrainRunHook
-import utils.dllogger_class
-from dllogger import Verbosity
+# import utils.dllogger_class
+# from dllogger import Verbosity
 from utils.create_glue_data_modified import *
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
@@ -61,9 +61,9 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
-flags.DEFINE_string(
-    "dllog_path", "bert_dllog.json",
-    "filename where dllogger writes to")
+# flags.DEFINE_string(
+#     "dllog_path", "bert_dllog.json",
+#     "filename where dllogger writes to")
 
 flags.DEFINE_string(
     "init_checkpoint", None,
@@ -448,7 +448,7 @@ def input_fn_builder(features, batch_size, seq_length, is_training, drop_remaind
 
 def main(_):
   tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
-  dllogging = utils.dllogger_class.dllogger_class(FLAGS.dllog_path)
+  # dllogging = utils.dllogger_class.dllogger_class(FLAGS.dllog_path)
 
   if FLAGS.horovod:
     hvd.init()
