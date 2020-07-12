@@ -554,7 +554,7 @@ def main(_):
   model_fn = model_fn_builder(
       task_name=task_name,
       bert_config=bert_config,
-      num_labels=len(label_list) if type(label_list) == 'list' else 1,
+      num_labels=len(label_list) if isinstance(label_list, list) else 1,
       init_checkpoint=FLAGS.init_checkpoint,
       learning_rate=FLAGS.learning_rate if not FLAGS.horovod else FLAGS.learning_rate * hvd.size(),
       num_train_steps=num_train_steps,

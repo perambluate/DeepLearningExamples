@@ -776,7 +776,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         segment_ids=[0] * max_seq_length,
         label_id=0,
         is_real_example=False)
-  categorical = not (type(label_list) == 'float')
+  categorical = isinstance(label_list, list)
   label_map = {}
   if categorical:
     for (i, label) in enumerate(label_list):
