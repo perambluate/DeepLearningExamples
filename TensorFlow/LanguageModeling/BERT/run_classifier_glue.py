@@ -298,9 +298,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             metrics = {"MCC": (MCC, MCC_op)}
             # return {"MCC": (MCC, MCC_op)}
         elif task_name == "stsb":
-            pearsonr, _ = pearsonr(label_ids, predictions)
-            spearmanr, _ = spearmanr(label_ids, predictions)
-            metrics = {"pear": pearsonr, "spear": spearmanr}
+            pearson = tf.contrib.metrics.streaming_pearson_correlation
+            metrics = {"pear": pearson}
         else:
             accuracy, acc_op = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
