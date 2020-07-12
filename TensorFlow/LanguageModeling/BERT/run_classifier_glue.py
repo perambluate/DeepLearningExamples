@@ -34,7 +34,7 @@ from utils.utils import LogEvalRunHook, LogTrainRunHook
 # from dllogger import Verbosity
 from utils.create_glue_data_modified import *
 import numpy as np
-from scipy.stats import pearsonr, spearmanr
+# from scipy.stats import pearsonr, spearmanr
 
 flags = tf.flags
 
