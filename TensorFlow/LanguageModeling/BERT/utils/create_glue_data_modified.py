@@ -333,9 +333,9 @@ class QQPProcessor(DataProcessor):
         text_b = tokenization.convert_to_unicode(line[2])
         label = "0"
       else:
-          text_a = tokenization.convert_to_unicode(line[3])
-          text_b = tokenization.convert_to_unicode(line[4])
-          label = tokenization.convert_to_unicode(line[5])
+        text_a = tokenization.convert_to_unicode(line[3])
+        text_b = tokenization.convert_to_unicode(line[4])
+        label = tokenization.convert_to_unicode(line[5])
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
@@ -490,7 +490,7 @@ class STSBProcessor(DataProcessor):
 
   def get_labels(self):
     """See base class."""
-    return [0., 1., 2., 3., 5.]
+    return 0
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
@@ -776,7 +776,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         segment_ids=[0] * max_seq_length,
         label_id=0,
         is_real_example=False)
-  categorical = not (len(label_list) == 1 and label_list == 0)
+  categorical = not (len(label_list) == 1)
   label_map = {}
   if categorical:
     for (i, label) in enumerate(label_list):
