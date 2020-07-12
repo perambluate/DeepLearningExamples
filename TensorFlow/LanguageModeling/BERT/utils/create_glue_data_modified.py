@@ -490,7 +490,7 @@ class STSBProcessor(DataProcessor):
 
   def get_labels(self):
     """See base class."""
-    return 0
+    return 0.
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
@@ -776,7 +776,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         segment_ids=[0] * max_seq_length,
         label_id=0,
         is_real_example=False)
-  categorical = not (len(label_list) == 1)
+  categorical = not (type(label_list) == 'float')
   label_map = {}
   if categorical:
     for (i, label) in enumerate(label_list):
