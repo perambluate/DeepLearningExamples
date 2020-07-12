@@ -302,13 +302,15 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             spearmanr, _ = spearmanr(label_ids, predictions)
             metrics = {"pear": pearsonr, "spear": spearmanr}
         else:
-            accuracy = tf.metrics.accuracy(
+            accuracy, acc_op = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
             loss = tf.metrics.mean(values=per_example_loss)
-            metrics = {"eval_accuracy": accuracy, "eval_loss": loss,}
+            metrics = {"eval_accuracy": (accuracy, acc_op), "eval_loss": loss,}
             if task_name in ["qqp", "mrpc"]:
-              recall = tf.metrics.recall(labels=label_ids, predictions=predictions)
-              metrics["F1_score"] = 2 * accuracy * recall / (accuracy + recall)
+              recall, recall_op = tf.metrics.recall(labels=label_ids, predictions=predictions)
+              F1_score = 2 * accuracy * recall / (accuracy + recall)
+              F1_op = tf.group(acc_op, recall_op, tf.identity(F1_score, name="F1_score"))
+              metrics["F1_score"] = (F1_score, F1_op)
         return metrics
             # return {
             #     "eval_accuracy": accuracy,
