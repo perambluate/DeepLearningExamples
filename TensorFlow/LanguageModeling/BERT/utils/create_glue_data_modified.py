@@ -502,9 +502,9 @@ class STSBProcessor(DataProcessor):
       text_a = tokenization.convert_to_unicode(line[7])
       text_b = tokenization.convert_to_unicode(line[8])
       if set_type == "test":
-        label = 0
+        label = 0.
       else:
-        label = tokenization.convert_to_unicode(line[9])
+        label = float(tokenization.convert_to_unicode(line[9]))
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
@@ -901,10 +901,10 @@ def file_based_convert_examples_to_features(
 
     def create_int_feature(values):
       if all(isinstance(value, int) for value in values):
-        f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
       elif all(isinstance(value, float) for value in values):
-        f = tf.train.Feature(int64_list=tf.train.FloatList(value=list(values)))
-      return f
+        return tf.train.Feature(int64_list=tf.train.FloatList(value=list(values)))
+      # return f
 
     features = collections.OrderedDict()
     features["input_ids"] = create_int_feature(feature.input_ids)
