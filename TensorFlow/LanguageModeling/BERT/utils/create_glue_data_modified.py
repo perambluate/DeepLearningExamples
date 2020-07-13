@@ -900,17 +900,19 @@ def file_based_convert_examples_to_features(
                                      max_seq_length, tokenizer)
 
     def create_int_feature(values):
-      if all(isinstance(value, int) for value in values):
-        return tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
-      elif all(isinstance(value, float) for value in values):
-        return tf.train.Feature(int64_list=tf.train.FloatList(value=list(values)))
-      # return f
+      f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
+      return f
+    
+    def create_float_feature(values):
+      f = tf.train.Feature(int64_list=tf.train.FloatList(value=list(values)))
+      return f
 
     features = collections.OrderedDict()
     features["input_ids"] = create_int_feature(feature.input_ids)
     features["input_mask"] = create_int_feature(feature.input_mask)
     features["segment_ids"] = create_int_feature(feature.segment_ids)
-    features["label_ids"] = create_int_feature([feature.label_id])
+    features["label_ids"] = create_int_feature([feature.label_id]) \
+        if not isinstance(feature.label_id, float) else create_float_feature([feature.label_id])
     features["is_real_example"] = create_int_feature(
         [int(feature.is_real_example)])
 
