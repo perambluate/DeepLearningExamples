@@ -215,7 +215,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
       loss = tf.reduce_mean(per_example_loss, name='cls_loss')
     else:
       probabilities = tf.sigmoid(logits) * 5.
-      per_example_loss = tf.nn.l2_loss((labels - logits), name='cls_per_example_loss') * 2
+      per_example_loss = tf.nn.l2_loss(tf.subtract(labels, logits), name='cls_per_example_loss') * 2
       loss = tf.reduce_mean(per_example_loss, name='cls_loss')
 
     return (loss, per_example_loss, logits, probabilities)
