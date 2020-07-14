@@ -291,7 +291,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           predictions = tf.sigmoid(logits) * 5.
           pearson = tf.contrib.metrics.streaming_pearson_correlation(
                           predictions=predictions, labels=label_ids, name="pear")
-          metrics = {"pear": pearson}
+          loss = tf.metrics.mean(values=per_example_loss)
+          metrics = {"pear": pearson, "eval_loss": loss}
         else:
           predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
           if task_name == "cola":
@@ -388,7 +389,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           loss=total_loss,
           eval_metric_ops=eval_metric_ops)
     else:
-      predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
+      predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32) if task_name != 'stsb' \
+          else probabilities
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=predictions)
       # output_spec = tf.estimator.EstimatorSpec(
@@ -738,8 +740,9 @@ def main(_):
           i = 0
           for predictions in estimator.predict(input_fn=predict_input_fn, 
                             hooks=predict_hooks, yield_single_examples=False):
-            for class_prediction in predictions:
-              predict_label = label_list[class_prediction]
+            
+            for prediction in predictions:
+              predict_label = label_list[prediction] if not is_stsb else prediction
               output_line += "{:d}\t{:s}\n".format(i, 
                   predict_label if isinstance(predict_label, str) else str(predict_label))
               # tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))
