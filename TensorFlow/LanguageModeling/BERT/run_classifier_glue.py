@@ -215,7 +215,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
       loss = tf.reduce_mean(per_example_loss, name='cls_loss')
     else:
       probabilities = tf.sigmoid(logits) * 5.
-      per_example_loss = tf.nn.l2_loss(tf.subtract(labels, logits), name='cls_per_example_loss') * 2
+      per_example_loss = tf.sqrt(tf.nn.l2_loss(tf.subtract(labels, probabilities), name='cls_per_example_loss') * 2)
       loss = tf.reduce_mean(per_example_loss, name='cls_loss')
 
     return (loss, per_example_loss, logits, probabilities)
@@ -324,6 +324,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
     input_mask = features["input_mask"]
     segment_ids = features["segment_ids"]
     label_ids = features["label_ids"]
+
+    tf.compat.v1.logging.info(label_ids.dtype)
 
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
