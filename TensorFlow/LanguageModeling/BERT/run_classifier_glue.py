@@ -173,7 +173,7 @@ def file_based_input_fn_builder(input_file, batch_size, seq_length, is_training,
 
 
 def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
-                 labels, num_labels, use_one_hot_embeddings, label_list=None, is_categorical):
+                 labels, num_labels, use_one_hot_embeddings, label_list=None, is_categorical=True):
   """Creates a classification model."""
   model = modeling.BertModel(
       config=bert_config,
