@@ -320,7 +320,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
     tf.compat.v1.logging.info("*** Features ***")
     for name in sorted(features.keys()):
       tf.compat.v1.logging.info("  name = %s, shape = %s, dtype = %s" \
-                % (name, features[name].shape, features[name].dtype)
+                % (name, features[name].shape, features[name].dtype))
 
     input_ids = features["input_ids"]
     input_mask = features["input_mask"]
