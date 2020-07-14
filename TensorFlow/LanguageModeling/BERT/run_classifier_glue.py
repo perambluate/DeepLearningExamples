@@ -218,7 +218,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
       # loss = tf.reduce_mean(per_example_loss, name='cls_loss')
     else:
       # probabilities = tf.sigmoid(logits) * 5.
-      predictions = tf.matmul(probabilities, tf.expand_dims(label_list, axis=-1))
+      predictions = tf.squeeze(tf.matmul(probabilities, tf.expand_dims(label_list, axis=-1)))
       per_example_loss = tf.sqrt(tf.reduce_sum(tf.square(labels - predictions), axis=-1), name='cls_per_example_loss')
     loss = tf.reduce_mean(per_example_loss, name='cls_loss')
 
