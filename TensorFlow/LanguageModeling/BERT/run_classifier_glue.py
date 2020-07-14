@@ -126,14 +126,14 @@ flags.DEFINE_bool(
 
 
 def file_based_input_fn_builder(input_file, batch_size, seq_length, is_training,
-                                drop_remainder, hvd=None, is_stsb=False):
+                                drop_remainder, hvd=None, is_categorical=True):
   """Creates an `input_fn` closure to be passed to Estimator."""
 
   name_to_features = {
       "input_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
       "input_mask": tf.io.FixedLenFeature([seq_length], tf.int64),
       "segment_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
-      "label_ids": tf.io.FixedLenFeature([], tf.int64) if not is_stsb \
+      "label_ids": tf.io.FixedLenFeature([], tf.int64) if is_categorical \
               else tf.io.FixedLenFeature([], tf.float32),
   }
 
@@ -173,7 +173,7 @@ def file_based_input_fn_builder(input_file, batch_size, seq_length, is_training,
 
 
 def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
-                 labels, num_labels, use_one_hot_embeddings):
+                 labels, num_labels, use_one_hot_embeddings, label_list=None, is_categorical):
   """Creates a classification model."""
   model = modeling.BertModel(
       config=bert_config,
@@ -207,19 +207,22 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
     logits = tf.matmul(output_layer, output_weights, transpose_b=True)
     logits = tf.nn.bias_add(logits, output_bias, name='cls_logits')
-    if (num_labels > 1):
-      probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
-      log_probs = tf.nn.log_softmax(logits, axis=-1)
+    probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
+    log_probs = tf.nn.log_softmax(logits, axis=-1)
+    if is_categorical:
+      # probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
+      # log_probs = tf.nn.log_softmax(logits, axis=-1)
+      predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
       one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
       per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1, name='cls_per_example_loss')
-      loss = tf.reduce_mean(per_example_loss, name='cls_loss')
+      # loss = tf.reduce_mean(per_example_loss, name='cls_loss')
     else:
-      probabilities = tf.sigmoid(logits) * 5.
-      per_example_loss = tf.sqrt(tf.reduce_sum(tf.square(labels - probabilities), axis=-1), name='cls_per_example_loss')
-      # (tf.nn.l2_loss(tf.subtract(labels, probabilities), name='cls_per_example_loss') * 2)
-      loss = tf.reduce_mean(per_example_loss, name='cls_loss')
+      # probabilities = tf.sigmoid(logits) * 5.
+      predictions = tf.matmul(probabilities, tf.expand_dims(label_list, axis=-1))
+      per_example_loss = tf.sqrt(tf.reduce_sum(tf.square(labels - predictions), axis=-1), name='cls_per_example_loss')
+    loss = tf.reduce_mean(per_example_loss, name='cls_loss')
 
-    return (loss, per_example_loss, logits, probabilities)
+    return (loss, per_example_loss, logits, probabilities, predictions)
 
 def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embeddings, init_checkpoint):
   tf_config = tf.compat.v1.ConfigProto()
@@ -280,41 +283,41 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
 
 def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps,
-                     use_one_hot_embeddings, hvd=None):
+                     use_one_hot_embeddings, hvd=None, label_list=None, is_categorical=True):
   """Returns `model_fn` closure for Estimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
     """The `model_fn` for Estimator."""
 
-    def metric_fn(per_example_loss, label_ids, logits):
+    def metric_fn(per_example_loss, label_ids, predictions):
         if task_name == "stsb":
-          predictions = tf.sigmoid(logits) * 5.
+          # predictions = tf.sigmoid(logits) * 5.
           pearson = tf.contrib.metrics.streaming_pearson_correlation(
                           predictions=predictions, labels=label_ids, name="pear")
           loss = tf.metrics.mean(values=per_example_loss)
           metrics = {"pear": pearson, "eval_loss": loss}
-        else:
-          predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-          if task_name == "cola":
-              FN, FN_op = tf.metrics.false_negatives(labels=label_ids, predictions=predictions)
-              FP, FP_op = tf.metrics.false_positives(labels=label_ids, predictions=predictions)
-              TP, TP_op = tf.metrics.true_positives(labels=label_ids, predictions=predictions)
-              TN, TN_op = tf.metrics.true_negatives(labels=label_ids, predictions=predictions)
+        # else:
+          # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+        elif task_name == "cola":
+            FN, FN_op = tf.metrics.false_negatives(labels=label_ids, predictions=predictions)
+            FP, FP_op = tf.metrics.false_positives(labels=label_ids, predictions=predictions)
+            TP, TP_op = tf.metrics.true_positives(labels=label_ids, predictions=predictions)
+            TN, TN_op = tf.metrics.true_negatives(labels=label_ids, predictions=predictions)
 
-              MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
-              MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
-              metrics = {"MCC": (MCC, MCC_op)}
-              # return {"MCC": (MCC, MCC_op)}
-          else:
-              accuracy, acc_op = tf.metrics.accuracy(
-                  labels=label_ids, predictions=predictions)
-              loss = tf.metrics.mean(values=per_example_loss)
-              metrics = {"eval_accuracy": (accuracy, acc_op), "eval_loss": loss,}
-              if task_name in ["qqp", "mrpc"]:
-                recall, recall_op = tf.metrics.recall(labels=label_ids, predictions=predictions)
-                F1_score = 2 * accuracy * recall / (accuracy + recall)
-                F1_op = tf.group(acc_op, recall_op, tf.identity(F1_score, name="F1_score"))
-                metrics["F1_score"] = (F1_score, F1_op)
+            MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
+            MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
+            metrics = {"MCC": (MCC, MCC_op)}
+            # return {"MCC": (MCC, MCC_op)}
+        else:
+            accuracy, acc_op = tf.metrics.accuracy(
+                labels=label_ids, predictions=predictions)
+            loss = tf.metrics.mean(values=per_example_loss)
+            metrics = {"eval_accuracy": (accuracy, acc_op), "eval_loss": loss,}
+            if task_name in ["qqp", "mrpc"]:
+              recall, recall_op = tf.metrics.recall(labels=label_ids, predictions=predictions)
+              F1_score = 2 * accuracy * recall / (accuracy + recall)
+              F1_op = tf.group(acc_op, recall_op, tf.identity(F1_score, name="F1_score"))
+              metrics["F1_score"] = (F1_score, F1_op)
         return metrics
             # return {
             #     "eval_accuracy": accuracy,
@@ -344,16 +347,16 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode, predictions=predictions)
         elif mode == tf.estimator.ModeKeys.EVAL:
-            eval_metric_ops = metric_fn(per_example_loss, label_ids, logits)
+            eval_metric_ops = metric_fn(per_example_loss, label_ids, predictions)
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 eval_metric_ops=eval_metric_ops)
         return output_spec
   
-    (total_loss, per_example_loss, logits, probabilities) = create_model(
+    (total_loss, per_example_loss, logits, probabilities, predictions) = create_model(
         bert_config, is_training, input_ids, input_mask, segment_ids, label_ids,
-        num_labels, use_one_hot_embeddings)
+        num_labels, use_one_hot_embeddings, label_list=None, is_categorical=True)
 
     tvars = tf.trainable_variables()
     initialized_variable_names = {}
@@ -383,14 +386,14 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           loss=total_loss,
           train_op=train_op)
     elif mode == tf.estimator.ModeKeys.EVAL:
-      eval_metric_ops = metric_fn(per_example_loss, label_ids, logits)
+      eval_metric_ops = metric_fn(per_example_loss, label_ids, predictions)
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
           eval_metric_ops=eval_metric_ops)
     else:
-      predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32) if task_name != 'stsb' \
-          else probabilities
+      # predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32) if task_name != 'stsb' \
+      #     else probabilities
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=predictions)
       # output_spec = tf.estimator.EstimatorSpec(
@@ -492,7 +495,7 @@ def main(_):
   task_name = FLAGS.task_name.lower()
   
   is_mnli = (task_name == 'mnli')
-  is_stsb = (task_name == 'stsb')
+  # is_stsb = (task_name == 'stsb')
 
   if task_name not in processors:
     raise ValueError("Task not found: %s" % (task_name))
@@ -500,6 +503,7 @@ def main(_):
   processor = processors[task_name]()
 
   label_list = processor.get_labels()
+  is_categorical = processor.is_categorical()
 
   tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
@@ -564,13 +568,14 @@ def main(_):
   model_fn = model_fn_builder(
       task_name=task_name,
       bert_config=bert_config,
-      num_labels=len(label_list) if isinstance(label_list, list) else 1,
+      num_labels=len(label_list),
       init_checkpoint=FLAGS.init_checkpoint,
       learning_rate=FLAGS.learning_rate if not FLAGS.horovod else FLAGS.learning_rate * hvd.size(),
       num_train_steps=num_train_steps,
       num_warmup_steps=num_warmup_steps,
       use_one_hot_embeddings=False,
-      hvd=None if not FLAGS.horovod else hvd)
+      hvd=None if not FLAGS.horovod else hvd,
+      label_list=None, is_categorical=True)
 
   estimator = tf.estimator.Estimator(
       model_fn=model_fn,
@@ -578,8 +583,9 @@ def main(_):
 
   if FLAGS.do_train:
 
-    file_based_convert_examples_to_features(
-        train_examples[start_index:end_index], label_list, FLAGS.max_seq_length, tokenizer, tmp_filenames[hvd_rank])
+    file_based_convert_examples_to_features(train_examples[start_index:end_index], 
+              label_list, FLAGS.max_seq_length, tokenizer, 
+              tmp_filenames[hvd_rank], is_categorical=is_categorical)
 
     tf.compat.v1.logging.info("***** Running training *****")
     tf.compat.v1.logging.info("  Num examples = %d", len(train_examples))
@@ -592,7 +598,7 @@ def main(_):
         is_training=True,
         drop_remainder=True,
         hvd=None if not FLAGS.horovod else hvd,
-        is_stsb=is_stsb)
+        is_categorical=is_categorical)
 
     train_start_time = time.time()
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps, hooks=training_hooks)
@@ -631,7 +637,8 @@ def main(_):
         output_eval_file = os.path.join(FLAGS.output_dir, 
                               "{:s}.txt".format(mnli_eval_set))
 
-      file_based_convert_examples_to_features(eval_examples, label_list, FLAGS.max_seq_length, tokenizer, eval_file)
+      file_based_convert_examples_to_features(eval_examples, label_list, 
+          FLAGS.max_seq_length, tokenizer, eval_file, is_categorical=is_categorical)
       tf.compat.v1.logging.info("***** Running evaluation *****")
       tf.compat.v1.logging.info("  Num examples = %d", len(eval_examples))
       tf.compat.v1.logging.info("  Batch size = %d", FLAGS.eval_batch_size)
@@ -642,7 +649,7 @@ def main(_):
           batch_size=FLAGS.eval_batch_size,
           seq_length=FLAGS.max_seq_length,
           is_training=False,
-          drop_remainder=eval_drop_remainder, is_stsb=is_stsb)
+          drop_remainder=eval_drop_remainder, is_categorical=is_categorical)
 
       eval_hooks = [LogEvalRunHook(FLAGS.eval_batch_size)]
       eval_start_time = time.time()
@@ -716,7 +723,7 @@ def main(_):
         output_predict_file = os.path.join(FLAGS.output_dir, 
                                     "{:s}_results.tsv".format(mnli_test_set))
       file_based_convert_examples_to_features(predict_examples, label_list,
-                                  FLAGS.max_seq_length, tokenizer, predict_file)
+              FLAGS.max_seq_length, tokenizer, predict_file, is_categorical=is_categorical)
 
       tf.compat.v1.logging.info("***** Running prediction*****")
       tf.compat.v1.logging.info("  Num examples = %d", len(predict_examples))
@@ -728,7 +735,7 @@ def main(_):
           batch_size=FLAGS.predict_batch_size,
           seq_length=FLAGS.max_seq_length,
           is_training=False,
-          drop_remainder=predict_drop_remainder, is_stsb=is_stsb)
+          drop_remainder=predict_drop_remainder, is_categorical=is_categorical)
 
       predict_hooks = [LogEvalRunHook(FLAGS.predict_batch_size)]
       predict_start_time = time.time()
@@ -742,7 +749,7 @@ def main(_):
                             hooks=predict_hooks, yield_single_examples=False):
             
             for prediction in predictions:
-              predict_label = label_list[prediction] if not is_stsb else prediction
+              predict_label = label_list[prediction] if is_categorical else prediction
               output_line += "{:d}\t{:s}\n".format(i, 
                   predict_label if isinstance(predict_label, str) else str(predict_label))
               # tf.compat.v1.logging.info("the {:d}-th prediction is {:s}".format(i, str(predict_label)))

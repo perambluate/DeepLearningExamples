@@ -118,7 +118,7 @@ class InputFeatures(object):
 
 class DataProcessor(object):
   """Base class for data converters for sequence classification data sets."""
-
+  categorical = True
   def get_train_examples(self, data_dir):
     """Gets a collection of `InputExample`s for the train set."""
     raise NotImplementedError()
@@ -134,6 +134,9 @@ class DataProcessor(object):
   def get_labels(self):
     """Gets the list of labels for this data set."""
     raise NotImplementedError()
+
+  def is_categorical(self):
+    return self.categorical
 
   @classmethod
   def _read_tsv(cls, input_file, quotechar=None):
@@ -471,7 +474,7 @@ class MRPCProcessor(DataProcessor):
 
 class STSBProcessor(DataProcessor):
   """Processor for Sentence Textual Similarity Benchmark."""
-
+  categorical = False
   def get_train_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
@@ -490,7 +493,7 @@ class STSBProcessor(DataProcessor):
 
   def get_labels(self):
     """See base class."""
-    return 0.
+    return [0., 1., 2., 3., 5.]
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
@@ -768,7 +771,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
       tokens_b.pop()
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
-                           tokenizer, verbose_logging=False):
+                           tokenizer, verbose_logging=False, is_categorical=True):
   """Converts a single `InputExample` into a single `InputFeatures`."""
 
   if isinstance(example, PaddingInputExample):
@@ -778,9 +781,9 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         segment_ids=[0] * max_seq_length,
         label_id=0,
         is_real_example=False)
-  categorical = isinstance(label_list, list)
+  # categorical = isinstance(label_list, list)
   label_map = {}
-  if categorical:
+  if is_categorical:
     for (i, label) in enumerate(label_list):
       label_map[label] = i
 
@@ -850,7 +853,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   assert len(input_mask) == max_seq_length
   assert len(segment_ids) == max_seq_length
 
-  label_id = label_map[example.label] if categorical else example.label
+  label_id = label_map[example.label] if is_categorical else example.label
   if ex_index < 5 and verbose_logging:
     tf.compat.v1.logging.info("*** Example ***")
     tf.compat.v1.logging.info("guid: %s" % (example.guid))
@@ -886,8 +889,8 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     features.append(feature)
   return features
 
-def file_based_convert_examples_to_features(
-    examples, label_list, max_seq_length, tokenizer, output_file):
+def file_based_convert_examples_to_features(examples, label_list, 
+          max_seq_length, tokenizer, output_file, is_categorical=True):
   """Convert a set of `InputExample`s to a TFRecord file."""
 
   writer = tf.python_io.TFRecordWriter(output_file)
@@ -897,7 +900,7 @@ def file_based_convert_examples_to_features(
       tf.compat.v1.logging.info("Writing example %d of %d" % (ex_index, len(examples)))
 
     feature = convert_single_example(ex_index, example, label_list,
-                                     max_seq_length, tokenizer)
+            max_seq_length, tokenizer, is_categorical=is_categorical)
 
     def create_int_feature(values):
       f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
