@@ -356,7 +356,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
   
     (total_loss, per_example_loss, logits, probabilities, predictions) = create_model(
         bert_config, is_training, input_ids, input_mask, segment_ids, label_ids,
-        num_labels, use_one_hot_embeddings, label_list=label_list, is_categorical=True)
+        num_labels, use_one_hot_embeddings, label_list=label_list, is_categorical=is_categorical)
 
     tvars = tf.trainable_variables()
     initialized_variable_names = {}
@@ -575,7 +575,7 @@ def main(_):
       num_warmup_steps=num_warmup_steps,
       use_one_hot_embeddings=False,
       hvd=None if not FLAGS.horovod else hvd,
-      label_list=label_list, is_categorical=True)
+      label_list=label_list, is_categorical=is_categorical)
 
   estimator = tf.estimator.Estimator(
       model_fn=model_fn,
