@@ -126,14 +126,15 @@ flags.DEFINE_bool(
 
 
 def file_based_input_fn_builder(input_file, batch_size, seq_length, is_training,
-                                drop_remainder, hvd=None):
+                                drop_remainder, hvd=None, is_stsb=False):
   """Creates an `input_fn` closure to be passed to Estimator."""
 
   name_to_features = {
       "input_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
       "input_mask": tf.io.FixedLenFeature([seq_length], tf.int64),
       "segment_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
-      "label_ids": tf.io.FixedLenFeature([], tf.int64),
+      "label_ids": tf.io.FixedLenFeature([], tf.int64) if not is_stsb \
+              else tf.io.FixedLenFeature([], tf.float32),
   }
 
   def _decode_record(record, name_to_features):
@@ -161,8 +162,7 @@ def file_based_input_fn_builder(input_file, batch_size, seq_length, is_training,
       d = d.repeat()
       d = d.shuffle(buffer_size=100)
 
-    d = d.apply(
-        tf.contrib.data.map_and_batch(
+    d = d.apply(tf.contrib.data.map_and_batch(
             lambda record: _decode_record(record, name_to_features),
             batch_size=batch_size,
             drop_remainder=drop_remainder))
@@ -485,7 +485,9 @@ def main(_):
   tf.io.gfile.makedirs(FLAGS.output_dir)
 
   task_name = FLAGS.task_name.lower()
+  
   is_mnli = (task_name == 'mnli')
+  is_stsb = (task_name == 'stsb')
 
   if task_name not in processors:
     raise ValueError("Task not found: %s" % (task_name))
@@ -584,7 +586,8 @@ def main(_):
         seq_length=FLAGS.max_seq_length,
         is_training=True,
         drop_remainder=True,
-        hvd=None if not FLAGS.horovod else hvd)
+        hvd=None if not FLAGS.horovod else hvd,
+        is_stsb=is_stsb)
 
     train_start_time = time.time()
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps, hooks=training_hooks)
@@ -634,7 +637,7 @@ def main(_):
           batch_size=FLAGS.eval_batch_size,
           seq_length=FLAGS.max_seq_length,
           is_training=False,
-          drop_remainder=eval_drop_remainder)
+          drop_remainder=eval_drop_remainder, is_stsb=is_stsb)
 
       eval_hooks = [LogEvalRunHook(FLAGS.eval_batch_size)]
       eval_start_time = time.time()
@@ -720,7 +723,7 @@ def main(_):
           batch_size=FLAGS.predict_batch_size,
           seq_length=FLAGS.max_seq_length,
           is_training=False,
-          drop_remainder=predict_drop_remainder)
+          drop_remainder=predict_drop_remainder, is_stsb=is_stsb)
 
       predict_hooks = [LogEvalRunHook(FLAGS.predict_batch_size)]
       predict_start_time = time.time()
