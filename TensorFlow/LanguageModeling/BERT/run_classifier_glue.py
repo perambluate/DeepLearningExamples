@@ -34,7 +34,6 @@ from utils.utils import LogEvalRunHook, LogTrainRunHook
 # from dllogger import Verbosity
 from utils.create_glue_data_modified import *
 import numpy as np
-# from scipy.stats import pearsonr, spearmanr
 
 flags = tf.flags
 
@@ -210,14 +209,10 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
     probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
     log_probs = tf.nn.log_softmax(logits, axis=-1)
     if is_categorical:
-      # probabilities = tf.nn.softmax(logits, axis=-1, name='cls_probabilities')
-      # log_probs = tf.nn.log_softmax(logits, axis=-1)
       predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32)
       one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
       per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1, name='cls_per_example_loss')
-      # loss = tf.reduce_mean(per_example_loss, name='cls_loss')
     else:
-      # probabilities = tf.sigmoid(logits) * 5.
       predictions = tf.squeeze(tf.matmul(probabilities, tf.expand_dims(label_list, axis=-1)))
       per_example_loss = tf.sqrt(tf.reduce_sum(tf.square(labels - predictions), axis=-1), name='cls_per_example_loss')
     loss = tf.reduce_mean(per_example_loss, name='cls_loss')
@@ -291,23 +286,10 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
 
     def metric_fn(per_example_loss, label_ids, predictions):
         if task_name == "stsb":
-          # predictions = tf.sigmoid(logits) * 5.
           pearson = tf.contrib.metrics.streaming_pearson_correlation(
                           predictions=predictions, labels=label_ids, name="pear")
           loss = tf.metrics.mean(values=per_example_loss)
           metrics = {"pear": pearson, "eval_loss": loss}
-        # else:
-          # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-        # elif task_name == "cola":
-        #     FN, FN_op = tf.metrics.false_negatives(labels=label_ids, predictions=predictions)
-        #     FP, FP_op = tf.metrics.false_positives(labels=label_ids, predictions=predictions)
-        #     TP, TP_op = tf.metrics.true_positives(labels=label_ids, predictions=predictions)
-        #     TN, TN_op = tf.metrics.true_negatives(labels=label_ids, predictions=predictions)
-
-        #     MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
-        #     MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
-        #     metrics = {"MCC": (MCC, MCC_op)}
-            # return {"MCC": (MCC, MCC_op)}
         else:
             accuracy, acc_op = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
@@ -400,8 +382,6 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           loss=total_loss,
           eval_metric_ops=eval_metric_ops)
     else:
-      # predictions = tf.argmax(probabilities, axis=-1, output_type=tf.int32) if task_name != 'stsb' \
-      #     else probabilities
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=predictions)
       # output_spec = tf.estimator.EstimatorSpec(
@@ -503,7 +483,6 @@ def main(_):
   task_name = FLAGS.task_name.lower()
   
   is_mnli = (task_name == 'mnli')
-  # is_stsb = (task_name == 'stsb')
 
   if task_name not in processors:
     raise ValueError("Task not found: %s" % (task_name))
@@ -630,8 +609,6 @@ def main(_):
     if is_mnli:
       eval_times = 2
       mnli_eval_sets = ["m_eval", "mm_eval"]
-      # mnli_eval_outputs = ["{:s}.txt".format(name) for name in mnli_eval_sets]
-      # mnli_eval_records = ["{:s}.tf_record".format(name) for name in mnli_eval_sets]
       mnli_eval_examples = processor.get_dev_examples(FLAGS.data_dir)
     else:
       eval_examples = processor.get_dev_examples(FLAGS.data_dir)
@@ -714,8 +691,6 @@ def main(_):
     if is_mnli:
       test_times = 3
       mnli_test_sets = ["m_predict", "mm_predict", "d_predict"]
-      # mnli_predict_outputs = ["{:s}_test_results.tsv".format(name) for name in mnli_test_sets]
-      # mnli_predict_records = ["{:s}.record".format(name) for name in mnli_test_sets]
       mnli_predict_examples = processor.get_test_examples(FLAGS.data_dir)
     
     else:
