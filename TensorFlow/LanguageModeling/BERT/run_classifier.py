@@ -30,8 +30,8 @@ import tensorflow as tf
 import horovod.tensorflow as hvd
 import time
 from utils.utils import LogEvalRunHook, LogTrainRunHook
-import utils.dllogger_class
-from dllogger import Verbosity
+# import utils.dllogger_class
+# from dllogger import Verbosity
 from utils.create_glue_data import *
 import numpy as np
 
@@ -60,9 +60,9 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
-flags.DEFINE_string(
-    "dllog_path", "bert_dllog.json",
-    "filename where dllogger writes to")
+# flags.DEFINE_string(
+#     "dllog_path", "bert_dllog.json",
+#     "filename where dllogger writes to")
 
 flags.DEFINE_string(
     "init_checkpoint", None,
@@ -266,7 +266,7 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
     print('TRT node count:',
           len([1 for n in frozen_graph.node if str(n.op) == 'TRTEngineOp']))
     
-    with tf.io.gfile.GFile("frozen_modelTRT.pb", "wb") as f:
+    with tf.compat.v1.gfile.GFile("frozen_modelTRT.pb", "wb") as f:
       f.write(frozen_graph.SerializeToString())      
         
   return frozen_graph
@@ -429,7 +429,7 @@ def input_fn_builder(features, batch_size, seq_length, is_training, drop_remaind
 
 def main(_):
   tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
-  dllogging = utils.dllogger_class.dllogger_class(FLAGS.dllog_path)
+  # dllogging = utils.dllogger_class.dllogger_class(FLAGS.dllog_path)
 
   if FLAGS.horovod:
     hvd.init()
@@ -627,15 +627,15 @@ def main(_):
     tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
     tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
     tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
-    dllogging.logger.log(step=(), data={"throughput_train": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
+    # dllogging.logger.log(step=(), data={"throughput_train": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
     tf.compat.v1.logging.info("-----------------------------")
 
 
     output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-    with tf.io.gfile.GFile(output_eval_file, "w") as writer:
+    with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
       tf.compat.v1.logging.info("***** Eval results *****")
       for key in sorted(result.keys()):
-        dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
+        # dllogging.logger.log(step=(), data={key: float(result[key])}, verbosity=Verbosity.DEFAULT)
         tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
         writer.write("%s = %s\n" % (key, str(result[key])))
 
@@ -662,7 +662,7 @@ def main(_):
     predict_start_time = time.time()
 
     output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-    with tf.io.gfile.GFile(output_predict_file, "w") as writer:
+    with tf.compat.v1.gfile.GFile(output_predict_file, "w") as writer:
         tf.compat.v1.logging.info("***** Predict results *****")
         for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks,
                                             yield_single_examples=False):
@@ -702,7 +702,7 @@ def main(_):
     tf.compat.v1.logging.info("Latency Confidence Level 100 (ms) = %0.2f", cf_100 * 1000)
     tf.compat.v1.logging.info("Latency Average (ms) = %0.2f", avg * 1000)
     tf.compat.v1.logging.info("Throughput Average (sentences/sec) = %0.2f", ss_sentences_per_second)
-    dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
+    # dllogging.logger.log(step=(), data={"throughput_val": ss_sentences_per_second}, verbosity=Verbosity.DEFAULT)
     tf.compat.v1.logging.info("-----------------------------")
 
 
