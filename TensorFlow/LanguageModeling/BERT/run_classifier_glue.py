@@ -298,15 +298,15 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           metrics = {"pear": pearson, "eval_loss": loss}
         # else:
           # predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-        elif task_name == "cola":
-            FN, FN_op = tf.metrics.false_negatives(labels=label_ids, predictions=predictions)
-            FP, FP_op = tf.metrics.false_positives(labels=label_ids, predictions=predictions)
-            TP, TP_op = tf.metrics.true_positives(labels=label_ids, predictions=predictions)
-            TN, TN_op = tf.metrics.true_negatives(labels=label_ids, predictions=predictions)
+        # elif task_name == "cola":
+        #     FN, FN_op = tf.metrics.false_negatives(labels=label_ids, predictions=predictions)
+        #     FP, FP_op = tf.metrics.false_positives(labels=label_ids, predictions=predictions)
+        #     TP, TP_op = tf.metrics.true_positives(labels=label_ids, predictions=predictions)
+        #     TN, TN_op = tf.metrics.true_negatives(labels=label_ids, predictions=predictions)
 
-            MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
-            MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
-            metrics = {"MCC": (MCC, MCC_op)}
+        #     MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
+        #     MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
+        #     metrics = {"MCC": (MCC, MCC_op)}
             # return {"MCC": (MCC, MCC_op)}
         else:
             accuracy, acc_op = tf.metrics.accuracy(
@@ -318,6 +318,14 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
               F1_score = 2 * accuracy * recall / (accuracy + recall)
               F1_op = tf.group(acc_op, recall_op, tf.identity(F1_score, name="F1_score"))
               metrics["F1_score"] = (F1_score, F1_op)
+            elif task_name == "cola":
+              FN, FN_op = tf.metrics.false_negatives(labels=label_ids, predictions=predictions)
+              FP, FP_op = tf.metrics.false_positives(labels=label_ids, predictions=predictions)
+              TP, TP_op = tf.metrics.true_positives(labels=label_ids, predictions=predictions)
+              TN, TN_op = tf.metrics.true_negatives(labels=label_ids, predictions=predictions)
+              MCC = (TP * TN - FP * FN) / ((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) ** 0.5
+              MCC_op = tf.group(FN_op, TN_op, TP_op, FP_op, tf.identity(MCC, name="MCC"))
+              metrics["MCC"] = (MCC, MCC_op)
         return metrics
             # return {
             #     "eval_accuracy": accuracy,
