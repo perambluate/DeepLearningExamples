@@ -286,10 +286,16 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
 
     def metric_fn(per_example_loss, label_ids, predictions):
         if task_name == "stsb":
-          pearson = tf.contrib.metrics.streaming_pearson_correlation(
+            def spearman_corr(predictions=predictions, labels=label_ids):
+              ranked_predictions = tf.argsort(predictions, axis=-1) + 1
+              ranked_labels = tf.argsort(label_ids, axis=-1) + 1
+              return tf.contrib.metrics.streaming_pearson_correlation(
+                predictions=ranked_predictions, labels=ranked_labels, name="pear")
+            pearson = tf.contrib.metrics.streaming_pearson_correlation(
                           predictions=predictions, labels=label_ids, name="pear")
-          loss = tf.metrics.mean(values=per_example_loss)
-          metrics = {"pear": pearson, "eval_loss": loss}
+            spearman = spearman_corr(predictions=predictions, labels=label_ids)
+            loss = tf.metrics.mean(values=per_example_loss)
+            metrics = {"pear": pearson, "spear": spearman, "eval_loss": loss}
         else:
             accuracy, acc_op = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
