@@ -290,7 +290,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
               ranked_predictions = tf.argsort(predictions, axis=-1) + 1
               ranked_labels = tf.argsort(label_ids, axis=-1) + 1
               return tf.contrib.metrics.streaming_pearson_correlation(
-                predictions=ranked_predictions, labels=ranked_labels, name="pear")
+                predictions=tf.cast(ranked_predictions, dtype=tf.float32),
+                labels=tf.cast(ranked_labels, dtype=tf.float32), name="pear")
             pearson = tf.contrib.metrics.streaming_pearson_correlation(
                           predictions=predictions, labels=label_ids, name="pear")
             spearman = spearman_corr(predictions=predictions, labels=label_ids)
