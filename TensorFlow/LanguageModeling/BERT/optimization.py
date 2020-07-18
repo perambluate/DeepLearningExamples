@@ -48,7 +48,7 @@ def get_optimizer(opt_type, learning_rate):
           beta_2=0.999,
           epsilon=1e-6,
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
-    }.get(opt_type, default='adam')
+    }.get(opt_type, 'adam')
 
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
                      optimizer_type="adam", allreduce_post_accumulation=False):
