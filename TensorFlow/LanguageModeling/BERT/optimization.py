@@ -27,6 +27,29 @@ from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from horovod.tensorflow.compression import Compression
 
+def get_optimizer(opt_type, learning_rate):
+    return {
+        'gd': tf.compat.v1.train.GradientDescentOptimizer(learning_rate=learning_rate),
+        'momentum': tf.compat.v1.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.9),
+        'adagrad': tf.compat.v1.train.AdagradOptimizer(learning_rate=learning_rate, initial_accumulator_value=0.1),
+        'rmsp': tf.compat.v1.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.9, momentum=0),
+        'tf_adam': tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.99),
+        'adam': AdamWeightDecayOptimizer(
+          learning_rate=learning_rate,
+          weight_decay_rate=0.01,
+          beta_1=0.9,
+          beta_2=0.999,
+          epsilon=1e-6,
+          exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]),
+        'lamb': LAMBOptimizer(
+          learning_rate=learning_rate,
+          weight_decay_rate=0.01,
+          beta_1=0.9,
+          beta_2=0.999,
+          epsilon=1e-6,
+          exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
+    }.get(opt_type, default='adam')
+
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
                      optimizer_type="adam", allreduce_post_accumulation=False):
   """Creates an optimizer training op."""
@@ -71,27 +94,30 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
     learning_rate = (
         (1.0 - is_warmup) * learning_rate + is_warmup * warmup_learning_rate)
 
-  if optimizer_type == "lamb":
-      print("Initializing LAMB Optimizer")
-      optimizer = LAMBOptimizer(
-          learning_rate=learning_rate,
-          weight_decay_rate=0.01,
-          beta_1=0.9,
-          beta_2=0.999,
-          epsilon=1e-6,
-          exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
-  else:
-      print("Initializing ADAM Weight Decay Optimizer")
-      # It is recommended that you use this optimizer for fine tuning, since this
-      # is how the model was trained (note that the Adam m/v variables are NOT
-      # loaded from init_checkpoint.)
-      optimizer = AdamWeightDecayOptimizer(
-          learning_rate=learning_rate,
-          weight_decay_rate=0.01,
-          beta_1=0.9,
-          beta_2=0.999,
-          epsilon=1e-6,
-          exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
+  # if optimizer_type == "lamb":
+  #     print("Initializing LAMB Optimizer")
+  #     optimizer = LAMBOptimizer(
+  #         learning_rate=learning_rate,
+  #         weight_decay_rate=0.01,
+  #         beta_1=0.9,
+  #         beta_2=0.999,
+  #         epsilon=1e-6,
+  #         exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
+  # else:
+  #     print("Initializing ADAM Weight Decay Optimizer")
+  #     # It is recommended that you use this optimizer for fine tuning, since this
+  #     # is how the model was trained (note that the Adam m/v variables are NOT
+  #     # loaded from init_checkpoint.)
+  #     optimizer = AdamWeightDecayOptimizer(
+  #         learning_rate=learning_rate,
+  #         weight_decay_rate=0.01,
+  #         beta_1=0.9,
+  #         beta_2=0.999,
+  #         epsilon=1e-6,
+  #         exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
+    # for select different optimizer provided in TF
+    print("Using %s optimizer" % optimizer_type)
+    optimizer = get_optimizer(optimizer_type, learning_rate)
 
   if hvd is not None and (num_accumulation_steps == 1 or (not allreduce_post_accumulation)):
     optimizer = hvd.DistributedOptimizer(optimizer, sparse_as_dense=True, compression=Compression.fp16 if use_fp16 or manual_fp16 else Compression.none)

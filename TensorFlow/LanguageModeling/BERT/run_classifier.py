@@ -358,7 +358,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
 
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
-          hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps)
+          hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
 
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
