@@ -365,22 +365,22 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           loss=total_loss,
           train_op=train_op)
     elif mode == tf.estimator.ModeKeys.EVAL:
-      dummy_op = tf.no_op()
+      # dummy_op = tf.no_op()
       # Need to call mixed precision graph rewrite if fp16 to enable graph rewrite
-      if FLAGS.amp:
-        dummy_op = tf.train.experimental.enable_mixed_precision_graph_rewrite(
-            optimization.LAMBOptimizer(learning_rate=0.0))
+      # if FLAGS.amp:
+      #   dummy_op = tf.train.experimental.enable_mixed_precision_graph_rewrite(
+      #       optimization.LAMBOptimizer(learning_rate=0.0))
       eval_metric_ops = metric_fn(per_example_loss, label_ids, logits)
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
           eval_metric_ops=eval_metric_ops)
     else:
-      dummy_op = tf.no_op()
+      # dummy_op = tf.no_op()
       # Need to call mixed precision graph rewrite if fp16 to enable graph rewrite
-      if FLAGS.amp:
-        dummy_op = tf.train.experimental.enable_mixed_precision_graph_rewrite(
-            optimization.LAMBOptimizer(learning_rate=0.0))
+      # if FLAGS.amp:
+      #   dummy_op = tf.train.experimental.enable_mixed_precision_graph_rewrite(
+      #       optimization.LAMBOptimizer(learning_rate=0.0))
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=probabilities)
     return output_spec
@@ -525,7 +525,7 @@ def main(_):
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
-  training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank))
+  training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank, FLAGS.save_checkpoints_steps, num_steps_ignore_xla=10))
 
   if FLAGS.do_train:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
