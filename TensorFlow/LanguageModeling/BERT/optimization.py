@@ -358,7 +358,7 @@ class AdamaxOptimizer(AdamWeightDecayOptimizer):
       next_m = (
           tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, grad))
       next_v = tf.maximum(
-          tf.multiply(self.beta_2, v), tf.abs(grad)))
+          tf.multiply(self.beta_2, v), tf.abs(grad))
 
       update = next_m / (tf.sqrt(next_v) + self.epsilon)
 
