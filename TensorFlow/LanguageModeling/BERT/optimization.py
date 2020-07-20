@@ -29,10 +29,6 @@ from horovod.tensorflow.compression import Compression
 
 def get_optimizer(opt_type, learning_rate):
     return {
-        'gd': tf.compat.v1.train.GradientDescentOptimizer(learning_rate=learning_rate),
-        'momentum': tf.compat.v1.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.9),
-        'adagrad': tf.compat.v1.train.AdagradOptimizer(learning_rate=learning_rate, initial_accumulator_value=0.1),
-        'rmsp': tf.compat.v1.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.9, momentum=0),
         'tf_adam': tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.99),
         'adam': AdamWeightDecayOptimizer(
           learning_rate=learning_rate,
@@ -306,6 +302,81 @@ class AdamWeightDecayOptimizer(tf.compat.v1.train.Optimizer):
       param_name = m.group(1)
     return param_name
 
+class AdamaxOptimizer(AdamWeightDecayOptimizer):
+  def __init__(self,
+               learning_rate,
+               weight_decay_rate=0.0,
+               beta_1=0.9,
+               beta_2=0.999,
+               epsilon=1e-6,
+               exclude_from_weight_decay=None,
+               name="AdamaxOptimizer"):
+    """Constructs a AdamaxOptimizer."""
+    super(AdamaxOptimizer, self).__init__(False, name)
+  
+  def apply_gradients(self, grads_and_vars, global_step=None, name=None,
+      manual_fp16=False):
+    """See base class."""
+    assignments = []
+    for (grad, param) in grads_and_vars:
+      if grad is None or param is None:
+        continue
+
+      param_name = self._get_variable_name(param.name)
+      has_shadow = manual_fp16 and param.dtype.base_dtype != tf.float32
+      if has_shadow:
+        # create shadow fp32 weights for fp16 variable
+        param_fp32 = tf.get_variable(
+            name=param_name + "/shadow",
+            dtype=tf.float32,
+            trainable=False,
+            initializer=tf.cast(param.initialized_value(),tf.float32))
+      else:
+        param_fp32 = param
+
+      m = tf.get_variable(
+          name=param_name + "/adam_m",
+          shape=param.shape.as_list(),
+          dtype=tf.float32,
+          trainable=False,
+          initializer=tf.zeros_initializer())
+      v = tf.get_variable(
+          name=param_name + "/adam_v",
+          shape=param.shape.as_list(),
+          dtype=tf.float32,
+          trainable=False,
+          initializer=tf.zeros_initializer())
+
+      # Standard Adam update.
+      next_m = (
+          tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, grad))
+      next_v = tf.maximum(
+          tf.multiply(self.beta_2, v), tf.abs(grad)))
+
+      update = next_m / (tf.sqrt(next_v) + self.epsilon)
+
+      # Just adding the square of the weights to the loss function is *not*
+      # the correct way of using L2 regularization/weight decay with Adam,
+      # since that will interact with the m and v parameters in strange ways.
+      #
+      # Instead we want to decay the weights in a manner that doesn't interact
+      # with the m/v parameters. This is equivalent to adding the square
+      # of the weights to the loss with plain (non-momentum) SGD.
+      if self._do_use_weight_decay(param_name):
+        update += self.weight_decay_rate * param_fp32
+
+      update_with_lr = self.learning_rate * update
+
+      next_param = param_fp32 - update_with_lr
+
+      if has_shadow:
+        # cast shadow fp32 weights to fp16 and assign to trainable variable
+        param.assign(tf.cast(next_param, param.dtype.base_dtype))
+      assignments.extend(
+          [param_fp32.assign(next_param),
+           m.assign(next_m),
+           v.assign(next_v)])
+    return tf.group(*assignments, name=name)
 
 class LAMBOptimizer(tf.compat.v1.train.Optimizer):
   """A LAMB optimizer that includes "correct" L2 weight decay."""
