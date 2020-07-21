@@ -59,7 +59,8 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
   global_step = tf.compat.v1.train.get_or_create_global_step()
   
   # avoid step change in learning rate at end of warmup phase
-  if optimizer_type == "adam":
+  # if optimizer_type == "adam":
+  if optimizer_type == ["adam", "adamax"]:
       power = 1.0
       decayed_learning_rate_at_crossover_point = init_lr * (
                   (1.0 - float(num_warmup_steps) / float(num_train_steps)) ** power)
@@ -319,12 +320,14 @@ class AdamaxOptimizer(AdamWeightDecayOptimizer):
                exclude_from_weight_decay=None,
                name="AdamaxOptimizer"):
     """Constructs a AdamaxOptimizer."""
-    super(AdamaxOptimizer, self).__init__(False, name)
+    super(AdamaxOptimizer, self).__init__(learning_rate, weight_decay_rate, beta_1, beta_2,
+               epsilon, exclude_from_weight_decay, name)
   
-  def apply_gradients(self, grads_and_vars, global_step=None, name=None,
+  def apply_gradients(self, grads_and_vars, global_step, name=None,
       manual_fp16=False):
     """See base class."""
     assignments = []
+    steps = tf.cast(global_step, tf.float32)
     for (grad, param) in grads_and_vars:
       if grad is None or param is None:
         continue
@@ -342,13 +345,13 @@ class AdamaxOptimizer(AdamWeightDecayOptimizer):
         param_fp32 = param
 
       m = tf.get_variable(
-          name=param_name + "/adam_m",
+          name=param_name + "/adamax_m",
           shape=param.shape.as_list(),
           dtype=tf.float32,
           trainable=False,
           initializer=tf.zeros_initializer())
       v = tf.get_variable(
-          name=param_name + "/adam_v",
+          name=param_name + "/adamax_v",
           shape=param.shape.as_list(),
           dtype=tf.float32,
           trainable=False,
@@ -360,7 +363,7 @@ class AdamaxOptimizer(AdamWeightDecayOptimizer):
       next_v = tf.maximum(
           tf.multiply(self.beta_2, v), tf.abs(grad))
 
-      update = next_m / (tf.sqrt(next_v) + self.epsilon)
+      update = next_m / (tf.sqrt(next_v) + self.epsilon) / (1 - self.beta_1 ** steps)
 
       # Just adding the square of the weights to the loss function is *not*
       # the correct way of using L2 regularization/weight decay with Adam,
