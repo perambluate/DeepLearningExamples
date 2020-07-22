@@ -26,6 +26,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from horovod.tensorflow.compression import Compression
+import numpy as np
 
 def get_optimizer(opt_type, learning_rate):
     return {
@@ -37,7 +38,14 @@ def get_optimizer(opt_type, learning_rate):
           beta_2=0.999,
           epsilon=1e-6,
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]),
-        'adamax': AdamaxOptimizer(
+        'adamax': AdaMaxOptimizer(
+          learning_rate=learning_rate,
+          weight_decay_rate=0.01,
+          beta_1=0.9,
+          beta_2=0.999,
+          epsilon=1e-6,
+          exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]),
+        'nadam': NAdamOptimizer(
           learning_rate=learning_rate,
           weight_decay_rate=0.01,
           beta_1=0.9,
@@ -310,7 +318,7 @@ class AdamWeightDecayOptimizer(tf.compat.v1.train.Optimizer):
       param_name = m.group(1)
     return param_name
 
-class AdamaxOptimizer(AdamWeightDecayOptimizer):
+class AdaMaxOptimizer(AdamWeightDecayOptimizer):
   def __init__(self,
                learning_rate,
                weight_decay_rate=0.0,
@@ -318,9 +326,9 @@ class AdamaxOptimizer(AdamWeightDecayOptimizer):
                beta_2=0.999,
                epsilon=1e-6,
                exclude_from_weight_decay=None,
-               name="AdamaxOptimizer"):
-    """Constructs a AdamaxOptimizer."""
-    super(AdamaxOptimizer, self).__init__(learning_rate, weight_decay_rate, beta_1, beta_2,
+               name="AdaMaxOptimizer"):
+    """Constructs a AdaMaxOptimizer."""
+    super(AdaMaxOptimizer, self).__init__(learning_rate, weight_decay_rate, beta_1, beta_2,
                epsilon, exclude_from_weight_decay, name)
   
   def apply_gradients(self, grads_and_vars, global_step, name=None,
@@ -364,6 +372,84 @@ class AdamaxOptimizer(AdamWeightDecayOptimizer):
           tf.multiply(self.beta_2, v), tf.abs(grad))
 
       update = next_m / (tf.sqrt(next_v) + self.epsilon) / (1 - self.beta_1 ** steps)
+
+      # Just adding the square of the weights to the loss function is *not*
+      # the correct way of using L2 regularization/weight decay with Adam,
+      # since that will interact with the m and v parameters in strange ways.
+      #
+      # Instead we want to decay the weights in a manner that doesn't interact
+      # with the m/v parameters. This is equivalent to adding the square
+      # of the weights to the loss with plain (non-momentum) SGD.
+      if self._do_use_weight_decay(param_name):
+        update += self.weight_decay_rate * param_fp32
+
+      update_with_lr = self.learning_rate * update
+
+      next_param = param_fp32 - update_with_lr
+
+      if has_shadow:
+        # cast shadow fp32 weights to fp16 and assign to trainable variable
+        param.assign(tf.cast(next_param, param.dtype.base_dtype))
+      assignments.extend(
+          [param_fp32.assign(next_param),
+           m.assign(next_m),
+           v.assign(next_v)])
+    return tf.group(*assignments, name=name)
+
+class NAdamOptimizer(AdamWeightDecayOptimizer):
+  def __init__(self,
+               learning_rate,
+               weight_decay_rate=0.0,
+               beta_1=0.9,
+               beta_2=0.999,
+               epsilon=1e-6,
+               exclude_from_weight_decay=None,
+               name="NAdamOptimizer"):
+    """Constructs a NAdamOptimizer."""
+    super(NAdamOptimizer, self).__init__(learning_rate, weight_decay_rate, beta_1, beta_2,
+               epsilon, exclude_from_weight_decay, name)
+  
+  def apply_gradients(self, grads_and_vars, global_step, name=None,
+      manual_fp16=False):
+    """See base class."""
+    assignments = []
+    steps = tf.cast(global_step, tf.float32)
+    for (grad, param) in grads_and_vars:
+      if grad is None or param is None:
+        continue
+
+      param_name = self._get_variable_name(param.name)
+      has_shadow = manual_fp16 and param.dtype.base_dtype != tf.float32
+      if has_shadow:
+        # create shadow fp32 weights for fp16 variable
+        param_fp32 = tf.get_variable(
+            name=param_name + "/shadow",
+            dtype=tf.float32,
+            trainable=False,
+            initializer=tf.cast(param.initialized_value(),tf.float32))
+      else:
+        param_fp32 = param
+
+      m = tf.get_variable(
+          name=param_name + "/adamax_m",
+          shape=param.shape.as_list(),
+          dtype=tf.float32,
+          trainable=False,
+          initializer=tf.zeros_initializer())
+      v = tf.get_variable(
+          name=param_name + "/adamax_v",
+          shape=param.shape.as_list(),
+          dtype=tf.float32,
+          trainable=False,
+          initializer=tf.zeros_initializer())
+
+      # Standard Adam update.
+      g_hat = grad / (1 - self.beta_1 ** steps)
+      m = tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, g_hat)
+      m_hat = m / (1 - self.beta_1 ** steps)
+      next_m = (1 - self.beta_1) * g_hat + self.beta_1 * m_hat
+      next_v = tf.multiply(self.beta_2, v) + tf.multiply(1.0 - self.beta_2, tf.square(grad)) / (1 - self.beta_2 ** steps)
+      update = next_m / (tf.sqrt(next_v) + self.epsilon)
 
       # Just adding the square of the weights to the loss function is *not*
       # the correct way of using L2 regularization/weight decay with Adam,
