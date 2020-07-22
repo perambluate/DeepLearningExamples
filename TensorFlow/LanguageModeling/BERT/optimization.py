@@ -68,7 +68,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
   
   # avoid step change in learning rate at end of warmup phase
   # if optimizer_type == "adam":
-  if optimizer_type == ["adam", "adamax"]:
+  if optimizer_type == ["adam", "adamax", "nadam"]:
       power = 1.0
       decayed_learning_rate_at_crossover_point = init_lr * (
                   (1.0 - float(num_warmup_steps) / float(num_train_steps)) ** power)
@@ -431,13 +431,13 @@ class NAdamOptimizer(AdamWeightDecayOptimizer):
         param_fp32 = param
 
       m = tf.get_variable(
-          name=param_name + "/adamax_m",
+          name=param_name + "/nadam_m",
           shape=param.shape.as_list(),
           dtype=tf.float32,
           trainable=False,
           initializer=tf.zeros_initializer())
       v = tf.get_variable(
-          name=param_name + "/adamax_v",
+          name=param_name + "/nadam_v",
           shape=param.shape.as_list(),
           dtype=tf.float32,
           trainable=False,
@@ -445,8 +445,8 @@ class NAdamOptimizer(AdamWeightDecayOptimizer):
 
       # Standard Adam update.
       g_hat = grad / (1 - self.beta_1 ** steps)
-      m = tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, g_hat)
-      m_hat = m / (1 - self.beta_1 ** steps)
+      m_prime = tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, g_hat)
+      m_hat = m_prime / (1 - self.beta_1 ** steps)
       next_m = (1 - self.beta_1) * g_hat + self.beta_1 * m_hat
       next_v = tf.multiply(self.beta_2, v) + tf.multiply(1.0 - self.beta_2, tf.square(grad)) / (1 - self.beta_2 ** steps)
       update = next_m / (tf.sqrt(next_v) + self.epsilon)
