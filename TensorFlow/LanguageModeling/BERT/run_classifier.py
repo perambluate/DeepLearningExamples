@@ -60,9 +60,9 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
-# flags.DEFINE_string(
-#     "dllog_path", "bert_dllog.json",
-#     "filename where dllogger writes to")
+flags.DEFINE_string(
+    "optimizer_type", "lamb",
+    "Optimizer type : adam, adamax, nadam or lamb")
 
 flags.DEFINE_string(
     "optimizer_type", "lamb",
