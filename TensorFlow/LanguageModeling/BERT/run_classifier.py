@@ -58,6 +58,9 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
+flags.DEFINE_string(
+    "optimizer_type", "lamb",
+    "Optimizer type : adam, adamax, nadam or lamb")
 
 flags.DEFINE_string(
     "init_checkpoint", None,
@@ -261,7 +264,7 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
     print('TRT node count:',
           len([1 for n in frozen_graph.node if str(n.op) == 'TRTEngineOp']))
     
-    with tf.io.gfile.GFile("frozen_modelTRT.pb", "wb") as f:
+    with tf.compat.v1.gfile.GFile("frozen_modelTRT.pb", "wb") as f:
       f.write(frozen_graph.SerializeToString())      
         
   return frozen_graph
@@ -349,7 +352,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
 
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
-          hvd, False, FLAGS.use_fp16, FLAGS.num_accumulation_steps)
+          hvd, False, FLAGS.use_fp16, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
 
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
@@ -626,7 +629,7 @@ def main(_):
 
 
     output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-    with tf.io.gfile.GFile(output_eval_file, "w") as writer:
+    with tf.compat.v1.gfile.GFile(output_eval_file, "w") as writer:
       tf.compat.v1.logging.info("***** Eval results *****")
       for key in sorted(result.keys()):
         tf.compat.v1.logging.info("  %s = %s", key, str(result[key]))
@@ -655,7 +658,7 @@ def main(_):
     predict_start_time = time.time()
 
     output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-    with tf.io.gfile.GFile(output_predict_file, "w") as writer:
+    with tf.compat.v1.gfile.GFile(output_predict_file, "w") as writer:
         tf.compat.v1.logging.info("***** Predict results *****")
         for prediction in estimator.predict(input_fn=predict_input_fn, hooks=predict_hooks,
                                             yield_single_examples=False):
