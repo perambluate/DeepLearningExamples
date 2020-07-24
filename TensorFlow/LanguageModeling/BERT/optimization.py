@@ -365,7 +365,7 @@ class AdaMaxOptimizer(AdamWeightDecayOptimizer):
           trainable=False,
           initializer=tf.zeros_initializer())
 
-      # Standard Adam update.
+      # Standard AdaMax update.
       next_m = (
           tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, grad))
       next_v = tf.maximum(
@@ -374,7 +374,7 @@ class AdaMaxOptimizer(AdamWeightDecayOptimizer):
       update = next_m / (tf.sqrt(next_v) + self.epsilon) / (1 - self.beta_1 ** steps)
 
       # Just adding the square of the weights to the loss function is *not*
-      # the correct way of using L2 regularization/weight decay with Adam,
+      # the correct way of using L2 regularization/weight decay with AdaMax,
       # since that will interact with the m and v parameters in strange ways.
       #
       # Instead we want to decay the weights in a manner that doesn't interact
@@ -443,16 +443,16 @@ class NAdamOptimizer(AdamWeightDecayOptimizer):
           trainable=False,
           initializer=tf.zeros_initializer())
 
-      # Standard Adam update.
+      # Standard NAdam update.
       g_hat = grad / (1 - self.beta_1 ** steps)
-      m_prime = tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, g_hat)
-      m_hat = m_prime / (1 - self.beta_1 ** steps)
-      next_m = (1 - self.beta_1) * g_hat + self.beta_1 * m_hat
+      next_m = tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, g_hat)
+      m_hat = next_m / (1 - self.beta_1 ** steps)
+      m_bar = (1 - self.beta_1) * g_hat + self.beta_1 * m_hat
       next_v = tf.multiply(self.beta_2, v) + tf.multiply(1.0 - self.beta_2, tf.square(grad)) / (1 - self.beta_2 ** steps)
-      update = next_m / (tf.sqrt(next_v) + self.epsilon)
+      update = m_bar / (tf.sqrt(next_v) + self.epsilon)
 
       # Just adding the square of the weights to the loss function is *not*
-      # the correct way of using L2 regularization/weight decay with Adam,
+      # the correct way of using L2 regularization/weight decay with NAdam,
       # since that will interact with the m and v parameters in strange ways.
       #
       # Instead we want to decay the weights in a manner that doesn't interact
