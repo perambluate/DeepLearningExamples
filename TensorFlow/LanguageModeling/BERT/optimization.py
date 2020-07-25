@@ -448,8 +448,9 @@ class NAdamOptimizer(AdamWeightDecayOptimizer):
       next_m = tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, g_hat)
       m_hat = next_m / (1 - self.beta_1 ** steps)
       m_bar = (1 - self.beta_1) * g_hat + self.beta_1 * m_hat
-      next_v = tf.multiply(self.beta_2, v) + tf.multiply(1.0 - self.beta_2, tf.square(grad)) / (1 - self.beta_2 ** steps)
-      update = m_bar / (tf.sqrt(next_v) + self.epsilon)
+      next_v = tf.multiply(self.beta_2, v) + tf.multiply(1.0 - self.beta_2, tf.square(grad)) 
+      v_hat = next_v / (1 - self.beta_2 ** steps)
+      update = m_bar / (tf.sqrt(v_hat) + self.epsilon)
 
       # Just adding the square of the weights to the loss function is *not*
       # the correct way of using L2 regularization/weight decay with NAdam,
