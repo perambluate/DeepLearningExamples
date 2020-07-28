@@ -543,7 +543,7 @@ class NAdaMaxOptimizer(AdamWeightDecayOptimizer):
       m_bar = (1 - self.beta_1) * g_hat + self.beta_1 * m_hat
       next_v = tf.maximum(tf.multiply(self.beta_2, v), tf.abs(grad))
       # v_hat = next_v / (1 - self.beta_2 ** steps)
-      update = m_bar / (tf.sqrt(v_hat) + self.epsilon)
+      update = m_bar / (tf.sqrt(next_v) + self.epsilon)
 
       # Just adding the square of the weights to the loss function is *not*
       # the correct way of using L2 regularization/weight decay with NAdaMax,
