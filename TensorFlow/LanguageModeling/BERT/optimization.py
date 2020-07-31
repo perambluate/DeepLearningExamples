@@ -656,6 +656,98 @@ class AMSGradOptimizer(AdamWeightDecayOptimizer):
            v_hat.assign(next_v_hat)])
     return tf.group(*assignments, name=name)
 
+class AdaBoundOptimizer(AdamWeightDecayOptimizer):
+  def __init__(self,
+               learning_rate,
+               final_learning_rate=0.0,
+               weight_decay_rate=0.0,
+               beta_1=0.9,
+               beta_2=0.999,
+               gamma=1e-3,
+               epsilon=1e-6,
+               exclude_from_weight_decay=None,
+               name="AdaBoundOptimizer"):
+    """Constructs a AdaBoundOptimizer."""
+    super(AdaBoundOptimizer, self).__init__(learning_rate, weight_decay_rate, beta_1, beta_2,
+               epsilon, exclude_from_weight_decay, name)
+    self.final_learning_rate = final_learning_rate
+    self.gamma = gamma
+
+  def apply_gradients(self, grads_and_vars, global_step=None, name=None,
+      manual_fp16=False):
+    """See base class."""
+    assignments = []
+    steps = tf.cast(global_step, tf.float32)
+    for (grad, param) in grads_and_vars:
+      if grad is None or param is None:
+        continue
+
+      param_name = self._get_variable_name(param.name)
+      has_shadow = manual_fp16 and param.dtype.base_dtype != tf.float32
+      if has_shadow:
+        # create shadow fp32 weights for fp16 variable
+        param_fp32 = tf.get_variable(
+            name=param_name + "/shadow",
+            dtype=tf.float32,
+            trainable=False,
+            initializer=tf.cast(param.initialized_value(),tf.float32))
+      else:
+        param_fp32 = param
+
+      m = tf.get_variable(
+          name=param_name + "/adam_m",
+          shape=param.shape.as_list(),
+          dtype=tf.float32,
+          trainable=False,
+          initializer=tf.zeros_initializer())
+      v = tf.get_variable(
+          name=param_name + "/adam_v",
+          shape=param.shape.as_list(),
+          dtype=tf.float32,
+          trainable=False,
+          initializer=tf.zeros_initializer())
+
+      # Standard Adam update.
+      next_m = (
+          tf.multiply(self.beta_1, m) + tf.multiply(1.0 - self.beta_1, grad))
+      next_v = (
+          tf.multiply(self.beta_2, v) + tf.multiply(1.0 - self.beta_2,
+                                                    tf.square(grad)))
+           
+      update = next_m / (tf.sqrt(next_v) + self.epsilon)
+
+      # Just adding the square of the weights to the loss function is *not*
+      # the correct way of using L2 regularization/weight decay with AdaBound,
+      # since that will interact with the m and v parameters in strange ways.
+      #
+      # Instead we want to decay the weights in a manner that doesn't interact
+      # with the m/v parameters. This is equivalent to adding the square
+      # of the weights to the loss with plain (non-momentum) SGD.
+      if self._do_use_weight_decay(param_name):
+        update += self.weight_decay_rate * param_fp32
+
+      lower = next_m * self.final_learning_rate * (
+              1. - 1. / (self.gamma * steps + 1))
+      upper = next_m * self.final_learning_rate * (
+              1. + 1. / (self.gamma * steps))
+      
+      # update_with_lr = self.learning_rate * update
+      update_with_lr = self.learning_rate * update * tf.sqrt(
+            1. - (self.beta_2 ** steps)) / (1 - (self.beta_1 ** steps))
+      bounded_update = tf.compat.v1.clip_by_value(
+                        update_with_lr, lower, upper)
+
+      next_param = param_fp32 - bounded_update
+
+      if has_shadow:
+        # cast shadow fp32 weights to fp16 and assign to trainable variable
+        param.assign(tf.cast(next_param, param.dtype.base_dtype))
+      assignments.extend(
+          [param_fp32.assign(next_param),
+           m.assign(next_m),
+           v.assign(next_v)])
+    return tf.group(*assignments, name=name)
+
 class LAMBOptimizer(tf.compat.v1.train.Optimizer):
   """A LAMB optimizer that includes "correct" L2 weight decay."""
 
