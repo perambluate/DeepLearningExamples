@@ -66,6 +66,15 @@ def get_optimizer(opt_type, learning_rate):
           beta_2=0.999,
           epsilon=1e-6,
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]),
+        'adabound': AdaBoundOptimizer(
+          learning_rate=learning_rate,
+          final_learning_rate=1e-4,
+          weight_decay_rate=0.01,
+          beta_1=0.9,
+          beta_2=0.999,
+          gamma=1e-3,
+          epsilon=1e-8,
+          exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]),
         'lamb': LAMBOptimizer(
           learning_rate=learning_rate,
           weight_decay_rate=0.01,
