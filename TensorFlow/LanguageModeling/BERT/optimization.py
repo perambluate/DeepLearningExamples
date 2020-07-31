@@ -729,7 +729,7 @@ class AdaBoundOptimizer(AdamWeightDecayOptimizer):
       lower = next_m * self.final_learning_rate * (
               1. - 1. / (self.gamma * steps + 1))
       upper = next_m * self.final_learning_rate * (
-              1. + 1. / (self.gamma * steps))
+              1. + 1. / (self.gamma * steps + self.epsilon))
       
       # update_with_lr = self.learning_rate * update
       update_with_lr = self.learning_rate * update * tf.sqrt(
