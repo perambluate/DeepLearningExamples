@@ -315,7 +315,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
                   update_op = tf.assign_add(con_matrix_sum, con_matrix)
 
                   return tf.convert_to_tensor(con_matrix_sum), update_op
-              metric_dict['eval_cfs_matrix'] = eval_confusion_matrix(label_ids, predictions)
+              metric_dict['eval_cfs_matrix'] = eval_confusion_matrix(label_ids, predictions, 3)
             return metric_dict
             # return {
             #     "eval_accuracy": accuracy,
