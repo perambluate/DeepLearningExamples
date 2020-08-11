@@ -301,7 +301,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             accuracy = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
             loss = tf.metrics.mean(values=per_example_loss)
-            metrics_dict = {"eval_accuracy": accuracy,
+            metric_dict = {"eval_accuracy": accuracy,
                             "eval_loss": loss,}
             if task_name == 'mnli':
               def eval_confusion_matrix(labels, predictions, num_classes):
@@ -315,8 +315,8 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
                   update_op = tf.assign_add(con_matrix_sum, con_matrix)
 
                   return tf.convert_to_tensor(con_matrix_sum), update_op
-              metrics_dict['eval_cfs_matrix'] = eval_confusion_matrix(label_ids, predictions)
-            return metrics_dict
+              metric_dict['eval_cfs_matrix'] = eval_confusion_matrix(label_ids, predictions)
+            return metric_dict
             # return {
             #     "eval_accuracy": accuracy,
             #     "eval_loss": loss,
