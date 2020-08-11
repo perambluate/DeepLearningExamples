@@ -301,10 +301,26 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             accuracy = tf.metrics.accuracy(
                 labels=label_ids, predictions=predictions)
             loss = tf.metrics.mean(values=per_example_loss)
-            return {
-                "eval_accuracy": accuracy,
-                "eval_loss": loss,
-            }
+            metric_dict = {"eval_accuracy": accuracy,
+                            "eval_loss": loss,}
+            if task_name == 'mnli':
+              def eval_confusion_matrix(labels, predictions, num_classes):
+                with tf.variable_scope("eval_confusion_matrix"):
+                  con_matrix = tf.confusion_matrix(labels=labels, 
+                                                   predictions=predictions, num_classes=num_classes)
+                  con_matrix_sum = tf.Variable(tf.zeros(shape=(num_classes,num_classes), dtype=tf.int32),
+                                                      trainable=False,
+                                                      name="confusion_matrix_result",
+                                                      collections=[tf.GraphKeys.LOCAL_VARIABLES])
+                  update_op = tf.assign_add(con_matrix_sum, con_matrix)
+
+                  return tf.convert_to_tensor(con_matrix_sum), update_op
+              metric_dict['eval_cfs_matrix'] = eval_confusion_matrix(label_ids, predictions, 3)
+            return metric_dict
+            # return {
+            #     "eval_accuracy": accuracy,
+            #     "eval_loss": loss,
+            # }
     tf.compat.v1.logging.info("*** Features ***")
     for name in sorted(features.keys()):
       tf.compat.v1.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
