@@ -122,6 +122,10 @@ flags.DEFINE_bool("amp", True, "Whether to enable AMP ops. When false, uses TF32
 flags.DEFINE_bool("use_xla", True, "Whether to enable XLA JIT compilation.")
 flags.DEFINE_bool("horovod", False, "Whether to use Horovod for multi-gpu runs")
 
+# Whether to enable SWA
+flags.DEFINE_bool("use_swa", False, "Whether to enable SWA")
+flags.DEFINE_integer("swa_epoch", None, "The epoch for SWA op")
+
 flags.DEFINE_bool(
     "verbose_logging", False,
     "If true, all of the warnings related to data processing will be printed. "
@@ -279,8 +283,8 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
 
 
 def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
-                     num_train_steps, num_warmup_steps,
-                     use_one_hot_embeddings, hvd=None):
+                     num_train_steps, num_warmup_steps, use_one_hot_embeddings,
+                     hvd=None, num_steps_per_swa_update):
   """Returns `model_fn` closure for Estimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -371,10 +375,20 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
 
     output_spec = None
     if mode == tf.estimator.ModeKeys.TRAIN:
-
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
           hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
+      # if not FLAGS.use_swa:
+        # train_op = optimization.create_optimizer(
+        #     total_loss, learning_rate, num_train_steps, num_warmup_steps,
+        #     hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, 
+        #     FLAGS.optimizer_type, num_steps_per_swa_update=num_steps_per_swa_update)
+      # else:
+      #   (train_op, swa_op, swa_to_weights, save_weight_backups, restore_weight_backups) = \
+      #     optimization.create_optimizer(total_loss, learning_rate, 
+      #       num_train_steps, num_warmup_steps,hvd, False, FLAGS.amp,
+      #       FLAGS.num_accumulation_steps, FLAGS.optimizer_type, num_steps_per_swa_update=num_steps_per_swa_update)
+        
 
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
@@ -541,12 +555,16 @@ def main(_):
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
+  num_steps_per_swa_update = None
+  # num_steps_per_epoch = None
   training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank, FLAGS.save_checkpoints_steps, num_steps_ignore_xla=10))
 
   if FLAGS.do_train:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
     num_train_steps = int(
         len(train_examples) / global_batch_size * FLAGS.num_train_epochs)
+    if FLAGS.use_swa and FLAGS.swa_epoch is not None:
+      num_steps_per_swa_update = int(num_train_steps / FLAGS.swa_epoch)
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
     start_index = 0
@@ -573,7 +591,8 @@ def main(_):
       num_train_steps=num_train_steps,
       num_warmup_steps=num_warmup_steps,
       use_one_hot_embeddings=False,
-      hvd=None if not FLAGS.horovod else hvd)
+      hvd=None if not FLAGS.horovod else hvd,
+      num_steps_per_swa_update=num_steps_per_swa_update)
 
   estimator = tf.estimator.Estimator(
       model_fn=model_fn,

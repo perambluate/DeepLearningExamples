@@ -27,6 +27,7 @@ from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from horovod.tensorflow.compression import Compression
 import numpy as np
+from swa_tf import StochasticWeightAveraging
 
 def get_optimizer(opt_type, learning_rate):
     return {
@@ -84,14 +85,16 @@ def get_optimizer(opt_type, learning_rate):
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
     }.get(opt_type, 'adam')
 
+# def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
+#                      optimizer_type="adam", allreduce_post_accumulation=False):
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-                     optimizer_type="adam", allreduce_post_accumulation=False):
+                     optimizer_type="adam", num_steps_per_swa_update=None, allreduce_post_accumulation=False):
   """Creates an optimizer training op."""
   global_step = tf.compat.v1.train.get_or_create_global_step()
   
   # avoid step change in learning rate at end of warmup phase
   # if optimizer_type == "adam":
-  if optimizer_type == ["adam", "adamax", "nadam"]:
+  if optimizer_type == ["adam", "adamax", "nadam", "nadamax", "amsgrad", "adabound"]:
       power = 1.0
       decayed_learning_rate_at_crossover_point = init_lr * (
                   (1.0 - float(num_warmup_steps) / float(num_train_steps)) ** power)
@@ -235,8 +238,31 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
       new_global_step = tf.cond(all_are_finite, lambda: global_step + 1, lambda: global_step)
       new_global_step = tf.identity(new_global_step, name='step_update')
       train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+#   if num_steps_per_swa_update is not None:
+#     swa_local_step = tf.get_variable(name="swa_local_step", shape=[], dtype=tf.int32, trainable=False,
+#                                    initializer=tf.zeros_initializer)
+#     # reset_step = tf.cast(tf.math.equal(swa_local_step % num_steps_per_swa_update, 0), dtype=tf.bool)
+#     if swa_local_step % num_steps_per_swa_update == 0:
+#         return (train_op, SWA_ops(model_vars=tvars))
   return train_op
 
+def SWAops(model_vars=None):
+    if model_vars is not None:
+    # with tf.name_scope('SWA'):
+        swa = StochasticWeightAveraging()
+        swa_op = swa.apply(var_list=model_vars)
+        # Make backup variables
+        with tf.variable_scope('BackupVariables'):
+            backup_vars = [tf.get_variable(var.op.name, dtype=var.value().dtype, trainable=False,
+                                          initializer=var.initialized_value())
+                          for var in model_vars]
+        # operation to assign SWA weights to model
+        swa_to_weights = tf.group(*(tf.assign(var, swa.average(var).read_value()) for var in model_vars))
+        # operation to store model into backup variables
+        save_weight_backups = tf.group(*(tf.assign(bck, var.read_value()) for var, bck in zip(model_vars, backup_vars)))
+        # operation to get back values from backup variables to model
+        restore_weight_backups = tf.group(*(tf.assign(var, bck.read_value()) for var, bck in zip(model_vars, backup_vars)))
+        return (swa_op, swa_to_weights, save_weight_backups, restore_weight_backups)
 
 class AdamWeightDecayOptimizer(tf.compat.v1.train.Optimizer):
   """A basic Adam optimizer that includes "correct" L2 weight decay."""

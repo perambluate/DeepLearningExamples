@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import optimization
 import time
 
 # report latency and throughput during eval
@@ -67,3 +68,40 @@ class LogTrainRunHook(tf.estimator.SessionRunHook):
 
   #   self.skipped = (num_global_steps // self.save_checkpoints_steps) * 2 + \
   #                  min(2, num_global_steps % self.save_checkpoints_steps) - 1
+
+class SWAUpdateHook(tf.estimator.SessionRunHook):
+  def __init__(self, num_steps_per_swa_update, hvd_rank=-1):
+    self.num_steps_per_swa_update = num_steps_per_swa_update
+    self.hvd_rank = hvd_rank
+    self._step_timer = 0
+    self._do_swa = False
+    self.swa_times = 0
+    self._original_loss = None
+
+  # def after_create_session(self, session, coord):
+
+  def before_run(self, run_context):
+    # def make_inference(logist, label_ids):
+    #   return tf.reduce_mean(tf.cast(tf.equal(label_ids,
+    #       tf.argmax(logits, axis=-1, output_type=tf.int32)), dtype=tf.float32))
+    self._step_timer += 1
+    if self._step_timer % self.num_steps_per_swa_update == 0:
+      self._step_timer = 0
+      self.swa_times += 1
+      self._do_swa = True
+      return tf.estimator.SessionRunArgs(fetches=['cls_loss'])
+  
+  def after_run(self, run_context, run_values):
+    if self._do_swa:
+      self._original_loss = run_values.results
+      self._trainable_var = {
+          v.name: v for v in tf.compat.v1.get_collection(
+              tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+      }
+      (swa_op, swa_to_weights, save_weight_backups, 
+        restore_weight_backups) = optimization.SWAops(_trainable_var)
+      run_context.session.run(save_weight_backups)
+      run_context.session.run(swa_op)
+      run_context.session.run(swa_to_weights)
+      
+      run_context.session.run(restore_weight_backups)
