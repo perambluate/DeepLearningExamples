@@ -396,9 +396,9 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           mode=mode,
           loss=total_loss,
           train_op=train_op,
-          training_hooks=SWAUpdateHook(
+          training_hooks=[SWAUpdateHook(
             num_steps_per_swa_update=num_steps_per_swa_update,
-            hvd_rank=hvd.rank() if FLAGS.horovod else 0))
+            hvd_rank=hvd.rank() if FLAGS.horovod else 0)])
       else:
         output_spec = tf.estimator.EstimatorSpec(
             mode=mode,
