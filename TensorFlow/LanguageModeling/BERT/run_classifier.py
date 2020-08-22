@@ -286,7 +286,7 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
 #                      hvd=None):
 def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_one_hot_embeddings,
-                     hvd=None, num_steps_per_swa_update):
+                     hvd=None, num_steps_per_swa_update=None):
   """Returns `model_fn` closure for Estimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
