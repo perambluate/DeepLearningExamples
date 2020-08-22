@@ -29,7 +29,7 @@ import tokenization
 import tensorflow as tf
 import horovod.tensorflow as hvd
 import time
-from utils.utils import LogEvalRunHook, LogTrainRunHook
+from utils.utils import LogEvalRunHook, LogTrainRunHook, SWAUpdateHook
 # import utils.dllogger_class
 # from dllogger import Verbosity
 from utils.create_glue_data import *
@@ -281,7 +281,9 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
   return frozen_graph
 
 
-
+# def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
+#                      num_train_steps, num_warmup_steps, use_one_hot_embeddings,
+#                      hvd=None):
 def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_one_hot_embeddings,
                      hvd=None, num_steps_per_swa_update):
@@ -389,11 +391,19 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
       #       num_train_steps, num_warmup_steps,hvd, False, FLAGS.amp,
       #       FLAGS.num_accumulation_steps, FLAGS.optimizer_type, num_steps_per_swa_update=num_steps_per_swa_update)
         
-
-      output_spec = tf.estimator.EstimatorSpec(
+      if num_steps_per_swa_update is not None:
+        output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
-          train_op=train_op)
+          train_op=train_op,
+          training_hooks=SWAUpdateHook(
+            num_steps_per_swa_update=num_steps_per_swa_update,
+            hvd_rank=hvd.rank() if FLAGS.horovod else 0))
+      else:
+        output_spec = tf.estimator.EstimatorSpec(
+            mode=mode,
+            loss=total_loss,
+            train_op=train_op)
     elif mode == tf.estimator.ModeKeys.EVAL:
       # dummy_op = tf.no_op()
       # Need to call mixed precision graph rewrite if fp16 to enable graph rewrite

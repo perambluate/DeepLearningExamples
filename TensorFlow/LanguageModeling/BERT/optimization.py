@@ -85,10 +85,10 @@ def get_optimizer(opt_type, learning_rate):
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
     }.get(opt_type, 'adam')
 
-# def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-#                      optimizer_type="adam", allreduce_post_accumulation=False):
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-                     optimizer_type="adam", num_steps_per_swa_update=None, allreduce_post_accumulation=False):
+                     optimizer_type="adam", allreduce_post_accumulation=False):
+# def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
+#                      optimizer_type="adam", num_steps_per_swa_update=None, allreduce_post_accumulation=False):
   """Creates an optimizer training op."""
   global_step = tf.compat.v1.train.get_or_create_global_step()
   
