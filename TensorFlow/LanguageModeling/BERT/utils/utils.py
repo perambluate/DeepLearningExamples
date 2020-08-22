@@ -76,7 +76,7 @@ class SWAUpdateHook(tf.estimator.SessionRunHook):
     self._step_timer = 0
     self._do_swa = False
     self.swa_times = 0
-    self._original_loss = None
+    # self._original_loss = None
 
   # def after_create_session(self, session, coord):
 
@@ -89,17 +89,17 @@ class SWAUpdateHook(tf.estimator.SessionRunHook):
       self._step_timer = 0
       self.swa_times += 1
       self._do_swa = True
-      return tf.estimator.SessionRunArgs(fetches=['cls_loss'])
+      # return tf.estimator.SessionRunArgs(fetches=['cls_loss'])
   
   def after_run(self, run_context, run_values):
     if self._do_swa:
-      self._original_loss = run_values.results
+      # self._original_loss = run_values.results
       self._trainable_var = {
           v.name: v for v in tf.compat.v1.get_collection(
               tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
       }
       (swa_op, swa_to_weights, save_weight_backups, 
-        restore_weight_backups) = optimization.SWAops(_trainable_var)
+        restore_weight_backups) = optimization.SWAops(self._trainable_var)
       run_context.session.run(save_weight_backups)
       run_context.session.run(swa_op)
       run_context.session.run(swa_to_weights)
