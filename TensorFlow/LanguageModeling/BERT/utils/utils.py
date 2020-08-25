@@ -73,3 +73,25 @@ class LogTrainRunHook(tf.estimator.SessionRunHook):
 
     self.skipped = (num_global_steps // self.save_checkpoints_steps) * 2 + \
                    min(2, num_global_steps % self.save_checkpoints_steps) - 1
+
+class RestoreParametersAverageValues(tf.train.SessionRunHook):
+   """
+   Replace parameters with their moving averages.
+   This operation should be executed only once, and before any inference.
+   """
+   def __init__(self, ema):
+       """
+       :param ema:         tf.train.ExponentialMovingAverage
+       """
+       super(RestoreParametersAverageValues, self).__init__()
+       self._ema = ema
+       self._restore_ops = None
+
+   def begin(self):
+       """ Create restoring operations before the graph been finalized. """
+       ema_variables = tf.moving_average_variables()
+       self._restore_ops = [tf.assign(x, self._ema.average(x)) for x in ema_variables]
+
+   def after_create_session(self, session, coord):
+       """ Restore the parameters right after the session been created. """
+       session.run(self._restore_ops)

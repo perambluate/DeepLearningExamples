@@ -29,7 +29,8 @@ import tokenization
 import tensorflow as tf
 import horovod.tensorflow as hvd
 import time
-from utils.utils import LogEvalRunHook, LogTrainRunHook
+from utils.utils import LogEvalRunHook, LogTrainRunHook, 
+  RestoreParametersAverageValues
 from utils.create_glue_data import *
 import numpy as np
 
@@ -272,8 +273,8 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
 
 
 def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
-                     num_train_steps, num_warmup_steps,
-                     use_one_hot_embeddings, hvd=None):
+                     num_train_steps, num_warmup_steps, use_one_hot_embeddings,
+                     hvd=None, *, use_ema=False, n_ema_steps=0):
   """Returns `model_fn` closure for Estimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -314,7 +315,6 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             #     "eval_accuracy": accuracy,
             #     "eval_loss": loss,
             # }
-    tf.compat.v1.logging.info("*** Features ***")
     tf.compat.v1.logging.info("*** Features ***")
     for name in sorted(features.keys()):
       tf.compat.v1.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
@@ -362,24 +362,37 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             init_string = ", *INIT_FROM_CKPT*"
           tf.compat.v1.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
                           init_string)
+    if use_ema:
+      ema = tf.train.ExponentialMovingAverage(decay=0.9999)
 
     output_spec = None
     if mode == tf.estimator.ModeKeys.TRAIN:
-
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
           hvd, False, FLAGS.use_fp16, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
-
+      if use_ema:
+        ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
+                                      initializer=tf.zeros_initializer)
+        do_ema = tf.math.equal(ema_local_step % n_ema_steps, 0)
+        ema_local_step = tf.cond(do_ema, 
+          lambda:ema_local_step.assign(tf.ones_like(ema_local_step)),
+          lambda:ema_local_step.assign_add(1))
+        if do_ema:
+          with tf.control_dependencies([train_op,]):
+            ema_op = ema.apply(var_list=tvars)
+          train_op = tf.group(train_op, ema_op)
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
           train_op=train_op)
     elif mode == tf.estimator.ModeKeys.EVAL:
       eval_metric_ops = metric_fn(per_example_loss, label_ids, logits)
+      eval_hooks = [RestoreParametersAverageValues(ema)] if use_ema else []
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
-          eval_metric_ops=eval_metric_ops)
+          eval_metric_ops=eval_metric_ops,
+          evaluation_hooks=eval_hooks)
     else:
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode, predictions=probabilities)
