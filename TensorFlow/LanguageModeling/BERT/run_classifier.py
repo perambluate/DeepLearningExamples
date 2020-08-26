@@ -66,7 +66,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     "optimizer_type", "lamb",
-    "Optimizer type : adam or lamb")
+    "Optimizer type : tf_adam, adam, adamax, nadam, nadamax, amsgrad, adabound or lamb")
 flags.DEFINE_string(
     "init_checkpoint", None,
     "Initial checkpoint (usually from a pre-trained BERT model).")
