@@ -378,14 +378,14 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
         if isinstance(n_ema_steps, int) and (n_ema_steps > 0):
           ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
                                         initializer=tf.zeros_initializer)
-          do_ema = tf.math.equal(ema_local_step % n_ema_steps, 0)
+          do_ema = tf.cast(tf.math.equal(ema_local_step % n_ema_steps, 0), tf.bool)
           ema_local_step = tf.cond(do_ema, 
             lambda:ema_local_step.assign(tf.ones_like(ema_local_step)),
             lambda:ema_local_step.assign_add(1))
-          if do_ema:
-            with tf.control_dependencies([train_op,]):
-              ema_op = ema.apply(var_list=tvars)
-            train_op = tf.group(train_op, ema_op)
+          # if do_ema:
+          with tf.control_dependencies([train_op,]):
+            ema_op = tf.cond(do_ema, lambda: ema.apply(var_list=tvars), lambda: tf.no_op())
+          train_op = tf.group(train_op, ema_op)
         else:
           raise ValueError("n_ema_steps must be integer and lager than 0")
       output_spec = tf.estimator.EstimatorSpec(
