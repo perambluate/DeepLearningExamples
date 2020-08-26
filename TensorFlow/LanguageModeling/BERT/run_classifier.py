@@ -120,6 +120,8 @@ flags.DEFINE_integer("num_accumulation_steps", 1,
 # flags.DEFINE_bool("use_fp16", False, "Whether to use fp32 or fp16 arithmetic on GPU.")
 flags.DEFINE_bool("amp", True, "Whether to enable AMP ops. When false, uses TF32 on A100 and FP32 on V100 GPUS.")
 flags.DEFINE_bool("use_xla", True, "Whether to enable XLA JIT compilation.")
+flags.DEFINE_bool("use_ema", False, "Whether to enable EMA update operations.")
+flags.DEFINE_integer("ema_epoch", 5, "Number of epoch for EMA update")
 flags.DEFINE_bool("horovod", False, "Whether to use Horovod for multi-gpu runs")
 
 flags.DEFINE_bool(
@@ -375,7 +377,20 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
           hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
-
+      if use_ema:
+        if isinstance(n_ema_steps, int) and (n_ema_steps > 0):
+          ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
+                                        initializer=tf.zeros_initializer)
+          do_ema = tf.math.equal(ema_local_step % n_ema_steps, 0)
+          ema_local_step = tf.cond(do_ema, 
+            lambda:ema_local_step.assign(tf.ones_like(ema_local_step)),
+            lambda:ema_local_step.assign_add(1))
+          if do_ema:
+            with tf.control_dependencies([train_op,]):
+              ema_op = ema.apply(var_list=tvars)
+            train_op = tf.group(train_op, ema_op)
+        else:
+          raise ValueError("n_ema_steps must be integer and lager than 0")
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
@@ -541,12 +556,15 @@ def main(_):
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
+  num_ema_steps = None
   training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank, FLAGS.save_checkpoints_steps, num_steps_ignore_xla=10))
 
   if FLAGS.do_train:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
     num_train_steps = int(
         len(train_examples) / global_batch_size * FLAGS.num_train_epochs)
+    if FLAGS.use_ema:
+      num_ema_steps = int(num_train_steps / FLAGS.ema_epoch)
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
     start_index = 0
@@ -573,7 +591,9 @@ def main(_):
       num_train_steps=num_train_steps,
       num_warmup_steps=num_warmup_steps,
       use_one_hot_embeddings=False,
-      hvd=None if not FLAGS.horovod else hvd)
+      hvd=None if not FLAGS.horovod else hvd,
+      use_ema=FLAGS.use_ema,
+      n_ema_steps=num_ema_steps)
 
   estimator = tf.estimator.Estimator(
       model_fn=model_fn,
