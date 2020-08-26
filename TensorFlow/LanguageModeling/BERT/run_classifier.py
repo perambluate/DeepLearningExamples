@@ -58,20 +58,10 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
-<<<<<<< HEAD
-flags.DEFINE_string(
-    "optimizer_type", "lamb",
-    "Optimizer type : adam, adamax, nadam or lamb")
-
 flags.DEFINE_string(
     "optimizer_type", "lamb",
     "Optimizer type : tf_adam, adam, adamax, nadam, nadamax, amsgrad, adabound or lamb")
-=======
-flags.DEFINE_string(
-    "optimizer_type", "lamb",
-    "Optimizer type : adam, adamax, nadam or lamb")
 
->>>>>>> refs/remotes/origin/opt-dev/fp16
 flags.DEFINE_string(
     "init_checkpoint", None,
     "Initial checkpoint (usually from a pre-trained BERT model).")
@@ -121,15 +111,12 @@ flags.DEFINE_integer("iterations_per_loop", 1000,
 flags.DEFINE_integer("num_accumulation_steps", 1,
                      "Number of accumulation steps before gradient update" 
                       "Global batch size = num_accumulation_steps * train_batch_size")
-<<<<<<< HEAD
+
 # flags.DEFINE_bool("use_fp16", False, "Whether to use fp32 or fp16 arithmetic on GPU.")
 flags.DEFINE_bool("amp", True, "Whether to enable AMP ops. When false, uses TF32 on A100 and FP32 on V100 GPUS.")
 flags.DEFINE_bool("use_xla", True, "Whether to enable XLA JIT compilation.")
-=======
-flags.DEFINE_bool("use_fp16", False, "Whether to use fp32 or fp16 arithmetic on GPU.")
 
-flags.DEFINE_bool("use_xla", False, "Whether to enable XLA JIT compilation.")
->>>>>>> refs/remotes/origin/opt-dev/fp16
+# flags for Exponential Moving Average Update operation
 flags.DEFINE_bool("use_ema", False, "Whether to enable EMA update operations.")
 flags.DEFINE_integer("ema_epoch", 5, "Number of epoch for EMA update")
 flags.DEFINE_bool("horovod", False, "Whether to use Horovod for multi-gpu runs")
@@ -386,11 +373,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
     if mode == tf.estimator.ModeKeys.TRAIN:
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
-<<<<<<< HEAD
           hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
-=======
-          hvd, False, FLAGS.use_fp16, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
->>>>>>> refs/remotes/origin/opt-dev/fp16
       if use_ema:
         if isinstance(n_ema_steps, int) and (n_ema_steps > 0):
           ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
@@ -554,11 +537,7 @@ def main(_):
   num_train_steps = None
   num_warmup_steps = None
   num_ema_steps = None
-<<<<<<< HEAD
   training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank, FLAGS.save_checkpoints_steps, num_steps_ignore_xla=10))
-=======
-  training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank))
->>>>>>> refs/remotes/origin/opt-dev/fp16
 
   if FLAGS.do_train:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
