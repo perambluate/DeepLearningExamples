@@ -184,7 +184,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
       input_mask=input_mask,
       token_type_ids=segment_ids,
       use_one_hot_embeddings=use_one_hot_embeddings,
-      compute_type=tf.float16 if FLAGS.use_fp16 else tf.float32)
+      compute_type=tf.float16 if FLAGS.amp else tf.float32)
 
   # In the demo, we are doing a simple classification task on the entire
   # segment.
@@ -257,7 +257,7 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
         input_graph_def=frozen_graph,
         nodes_blacklist=output_node_names,
         max_workspace_size_bytes=(4096 << 20) - 1000,
-        precision_mode = "FP16" if FLAGS.use_fp16 else "FP32",
+        precision_mode = "FP16" if FLAGS.amp else "FP32",
         minimum_segment_size=4,
         is_dynamic_op=True,
         maximum_cached_engines=1000
@@ -467,7 +467,7 @@ def main(_):
 
   if FLAGS.horovod:
     hvd.init()
-  if FLAGS.use_fp16:
+  if FLAGS.amp:
     os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
   processors = {
       "cola": ColaProcessor,
@@ -658,7 +658,7 @@ def main(_):
     tf.compat.v1.logging.info("Summary Inference Statistics on EVAL set")
     tf.compat.v1.logging.info("Batch size = %d", FLAGS.eval_batch_size)
     tf.compat.v1.logging.info("Sequence Length = %d", FLAGS.max_seq_length)
-    tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.use_fp16 else "fp32")
+    tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.amp else "fp32")
     tf.compat.v1.logging.info("Latency Confidence Level 50 (ms) = %0.2f", cf_50 * 1000)
     tf.compat.v1.logging.info("Latency Confidence Level 90 (ms) = %0.2f", cf_90 * 1000)
     tf.compat.v1.logging.info("Latency Confidence Level 95 (ms) = %0.2f", cf_95 * 1000)
@@ -732,7 +732,7 @@ def main(_):
     tf.compat.v1.logging.info("Summary Inference Statistics on TEST SET")
     tf.compat.v1.logging.info("Batch size = %d", FLAGS.predict_batch_size)
     tf.compat.v1.logging.info("Sequence Length = %d", FLAGS.max_seq_length)
-    tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.use_fp16 else "fp32")
+    tf.compat.v1.logging.info("Precision = %s", "fp16" if FLAGS.amp else "fp32")
     tf.compat.v1.logging.info("Latency Confidence Level 50 (ms) = %0.2f", cf_50 * 1000)
     tf.compat.v1.logging.info("Latency Confidence Level 90 (ms) = %0.2f", cf_90 * 1000)
     tf.compat.v1.logging.info("Latency Confidence Level 95 (ms) = %0.2f", cf_95 * 1000)
