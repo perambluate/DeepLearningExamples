@@ -29,8 +29,7 @@ import tokenization
 import tensorflow as tf
 import horovod.tensorflow as hvd
 import time
-from utils.utils import LogEvalRunHook, LogTrainRunHook, 
-  RestoreParametersAverageValues
+from utils.utils import *
 from utils.create_glue_data import *
 import numpy as np
 
