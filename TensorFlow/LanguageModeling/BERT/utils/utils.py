@@ -83,7 +83,7 @@ class RestoreParametersAverageValues(tf.train.SessionRunHook):
 
    def begin(self):
        """ Create restoring operations before the graph been finalized. """
-       ema_variables = tf.moving_average_variables()
+       ema_variables = tf.compat.v1.moving_average_variables()
        self._restore_ops = [tf.assign(x, self._ema.average(x)) for x in ema_variables]
 
    def after_create_session(self, session, coord):
