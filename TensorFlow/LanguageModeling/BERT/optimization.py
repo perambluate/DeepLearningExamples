@@ -85,7 +85,7 @@ def get_optimizer(opt_type, learning_rate):
     }.get(opt_type, 'adam')
 
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-                     optimizer_type="adam", allreduce_post_accumulation=False):
+                     optimizer_type="adam", allreduce_post_accumulation=False, *, ema=None, n_ema_steps=0):
   """Creates an optimizer training op."""
   global_step = tf.compat.v1.train.get_or_create_global_step()
   
@@ -212,7 +212,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
 
       new_global_step = tf.cond(tf.math.logical_and(update_step, tf.cast(hvd.allreduce(tf.cast(batch_finite, tf.int32)), tf.bool)), lambda: global_step+1, lambda: global_step)
       new_global_step = tf.identity(new_global_step, name='step_update')
-      train_op = tf.group(update_op, [global_step.assign(new_global_step)])
+      # train_op = tf.group(update_op, [global_step.assign(new_global_step)])
   else:
       grads_and_vars = [(g, v) for g, v in grads_and_vars if g is not None]
       grads, tvars = list(zip(*grads_and_vars))
@@ -229,12 +229,27 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
               lambda: tf.global_norm(grads),
               lambda: tf.constant(1.0)))
 
-      train_op = optimizer.apply_gradients(
+      # train_op = optimizer.apply_gradients(
+      #     list(zip(clipped_grads, tvars)), global_step=global_step)
+      update_op = optimizer.apply_gradients(
           list(zip(clipped_grads, tvars)), global_step=global_step)
 
       new_global_step = tf.cond(all_are_finite, lambda: global_step + 1, lambda: global_step)
       new_global_step = tf.identity(new_global_step, name='step_update')
-      train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+      # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+  if ema:
+    ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
+                                      initializer=tf.zeros_initializer)
+    do_ema = tf.cast(tf.math.equal(ema_local_step % n_ema_steps, 0), tf.bool)
+    ema_local_step = tf.cond(do_ema, 
+          lambda:ema_local_step.assign(tf.ones_like(ema_local_step)),
+          lambda:ema_local_step.assign_add(1))
+
+    with tf.control_dependencies([update_op,]):
+      ema_op = tf.cond(do_ema, lambda: ema.apply(var_list=tvars), lambda: tf.no_op())
+    train_op = tf.group(ema_op, [global_step.assign(new_global_step)])
+  else:
+    train_op = tf.group(update_op, [global_step.assign(new_global_step)])
   return train_op
 
 

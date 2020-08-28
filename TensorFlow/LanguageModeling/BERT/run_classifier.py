@@ -366,28 +366,27 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
             init_string = ", *INIT_FROM_CKPT*"
           tf.compat.v1.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
                           init_string)
-    if use_ema:
+    if use_ema and (n_ema_steps > 0):
       ema = tf.train.ExponentialMovingAverage(decay=0.9999)
 
     output_spec = None
     if mode == tf.estimator.ModeKeys.TRAIN:
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
-          hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type)
-      if use_ema:
-        if isinstance(n_ema_steps, int) and (n_ema_steps > 0):
-          ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
-                                        initializer=tf.zeros_initializer)
-          do_ema = tf.cast(tf.math.equal(ema_local_step % n_ema_steps, 0), tf.bool)
-          ema_local_step = tf.cond(do_ema, 
-            lambda:ema_local_step.assign(tf.ones_like(ema_local_step)),
-            lambda:ema_local_step.assign_add(1))
-          # if do_ema:
-          with tf.control_dependencies([train_op,]):
-            ema_op = tf.cond(do_ema, lambda: ema.apply(var_list=tvars), lambda: tf.no_op())
-          train_op = tf.group(train_op, ema_op)
-        else:
-          raise ValueError("n_ema_steps must be integer and lager than 0")
+          hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type,
+          ema=ema if use_ema else None,
+          n_ema_steps=n_ema_steps)
+      # if ema:
+      #     ema_local_step = tf.get_variable(name="ema_local_step", shape=[], dtype=tf.int32, trainable=False,
+      #                                   initializer=tf.zeros_initializer)
+      #     do_ema = tf.cast(tf.math.equal(ema_local_step % n_ema_steps, 0), tf.bool)
+      #     ema_local_step = tf.cond(do_ema, 
+      #       lambda:ema_local_step.assign(tf.ones_like(ema_local_step)),
+      #       lambda:ema_local_step.assign_add(1))
+      #     with tf.control_dependencies([train_op,]):
+      #       ema_op = tf.cond(do_ema, lambda: ema.apply(var_list=tvars), lambda: tf.no_op())
+      #     train_op = tf.group(train_op, ema_op)
+
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
