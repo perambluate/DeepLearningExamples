@@ -35,7 +35,6 @@ from utils.utils import *
 # from dllogger import Verbosity
 from utils.create_glue_data import *
 import numpy as np
-from swa_tf import StochasticWeightAveraging
 
 flags = tf.flags
 
@@ -124,9 +123,10 @@ flags.DEFINE_bool("amp", True, "Whether to enable AMP ops. When false, uses TF32
 flags.DEFINE_bool("use_xla", True, "Whether to enable XLA JIT compilation.")
 flags.DEFINE_bool("horovod", False, "Whether to use Horovod for multi-gpu runs")
 
-# Whether to enable SWA
-flags.DEFINE_bool("use_swa", False, "Whether to enable SWA")
-flags.DEFINE_integer("swa_epoch", 5, "The epoch for SWA op")
+# Whether to enable weight averaging
+flags.DEFINE_bool("use_wa", False, "Whether to enable WA")
+flags.DEFINE_integer("wa_epoch", 5, "The epoch for WA")
+flags.DEFINE_integer("wa_start_epoch", 1, "The start epoch for WA")
 
 flags.DEFINE_bool(
     "verbose_logging", False,
@@ -288,7 +288,7 @@ def get_frozen_tftrt_model(bert_config, shape, num_labels, use_one_hot_embedding
 #                      hvd=None):
 def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_one_hot_embeddings,
-                     hvd=None, n_swa_steps=None):
+                     hvd=None, *, wa_start_step=0, wa_period=None):
   """Returns `model_fn` closure for Estimator."""
 
   def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -377,25 +377,14 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           tf.compat.v1.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
                           init_string)
 
-    if n_swa_steps is not None:
-      swa = StochasticWeightAveraging()
     output_spec = None
     if mode == tf.estimator.ModeKeys.TRAIN:
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
-          hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type, 
-          swa=swa if n_swa_steps else None,
-          n_swa_steps=n_swa_steps)
-        
-      # if n_swa_steps is not None:
-      #   output_spec = tf.estimator.EstimatorSpec(
-      #     mode=mode,
-      #     loss=total_loss,
-      #     train_op=train_op,
-      #     training_hooks=[SWAUpdateHook(
-      #       n_swa_steps=n_swa_steps,
-      #       hvd_rank=hvd.rank() if FLAGS.horovod else 0)])
-      # else:
+          hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type,
+          wa_start_step=wa_start_step,
+          wa_period=wa_period)
+
       output_spec = tf.estimator.EstimatorSpec(
             mode=mode,
             loss=total_loss,
@@ -561,7 +550,7 @@ def main(_):
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
-  n_swa_steps = None
+  wa_period = None
   # num_steps_per_epoch = None
   training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank, FLAGS.save_checkpoints_steps, num_steps_ignore_xla=10))
 
@@ -569,8 +558,9 @@ def main(_):
     train_examples = processor.get_train_examples(FLAGS.data_dir)
     num_train_steps = int(
         len(train_examples) / global_batch_size * FLAGS.num_train_epochs)
-    if FLAGS.use_swa:
-      n_swa_steps = int(num_train_steps / FLAGS.swa_epoch)
+    if FLAGS.use_wa:
+      wa_period = int(num_train_steps / FLAGS.wa_epoch)
+      wa_start_step = wa_period * FLAGS.wa_start_epoch
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
     start_index = 0
@@ -598,7 +588,8 @@ def main(_):
       num_warmup_steps=num_warmup_steps,
       use_one_hot_embeddings=False,
       hvd=None if not FLAGS.horovod else hvd,
-      n_swa_steps=n_swa_steps)
+      wa_start_step=wa_start_step,
+      wa_period=wa_period)
 
   estimator = tf.estimator.Estimator(
       model_fn=model_fn,

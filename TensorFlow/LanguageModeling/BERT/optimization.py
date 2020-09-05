@@ -29,6 +29,13 @@ from horovod.tensorflow.compression import Compression
 import numpy as np
 from swa_tf import StochasticWeightAveraging
 
+def get_optimizer_cls(opt_type):
+  return {'tf_adam': tf.compat.v1.train.AdamOptimizer,
+  'adam': AdamWeightDecayOptimizer,
+  'adamax': AdaMaxOptimizer,
+  'nadam': NAdamOptimizer,
+  'nadamax': NAdaMaxOptimizer,
+  'amsgrad': NAdaMaxOptimizer}.get(opt_type, 'adam')
 def get_optimizer(opt_type, learning_rate):
     return {
         'tf_adam': tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.99),
@@ -88,7 +95,7 @@ def get_optimizer(opt_type, learning_rate):
 # def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
 #                      optimizer_type="adam", allreduce_post_accumulation=False):
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-                     optimizer_type="adam", allreduce_post_accumulation=False, *, swa=None, n_swa_steps=None):
+                     optimizer_type="adam", allreduce_post_accumulation=False, *, wa_start_step=0, wa_period=None):
   """Creates an optimizer training op."""
   global_step = tf.compat.v1.train.get_or_create_global_step()
   
@@ -153,7 +160,15 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
   #         beta_2=0.999,
   #         epsilon=1e-6,
   #         exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
-    # for select different optimizer provided in TF
+  
+  # for select different optimizer provided in TF
+
+  if wa_period is not None:
+    PAWrapper = ParamAveragingWrapper(start_step=wa_start_step, avg_period=wa_period)
+    opt_cls = get_optimizer_cls(optimizer_type)
+    PA_optimizer = PAWrapper(opt_cls)
+    optimizer = PA_optimizer(learning_rate=learning_rate)
+  else:
     print("Using %s optimizer" % optimizer_type)
     optimizer = get_optimizer(optimizer_type, learning_rate)
 
@@ -215,7 +230,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
 
       new_global_step = tf.cond(tf.math.logical_and(update_step, tf.cast(hvd.allreduce(tf.cast(batch_finite, tf.int32)), tf.bool)), lambda: global_step+1, lambda: global_step)
       new_global_step = tf.identity(new_global_step, name='step_update')
-      train_op = tf.group(update_op, [global_step.assign(new_global_step)])
+      # train_op = tf.group(update_op, [global_step.assign(new_global_step)])
   else:
       grads_and_vars = [(g, v) for g, v in grads_and_vars if g is not None]
       grads, tvars = list(zip(*grads_and_vars))
@@ -232,28 +247,38 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
               lambda: tf.global_norm(grads),
               lambda: tf.constant(1.0)))
 
-      train_op = optimizer.apply_gradients(
+      update_op = optimizer.apply_gradients(
           list(zip(clipped_grads, tvars)), global_step=global_step)
 
       new_global_step = tf.cond(all_are_finite, lambda: global_step + 1, lambda: global_step)
       new_global_step = tf.identity(new_global_step, name='step_update')
-      train_op = tf.group(train_op, [global_step.assign(new_global_step)])
-  if swa and n_swa_steps:
-    if hvd.rank() == 0:
-      swa_local_step = tf.get_variable(name="swa_local_step", shape=[],
-              dtype=tf.int32, trainable=False, initializer=tf.zeros_initializer)
-      swa_local_step = tf.cond(
-              tf.cast(tf.math.equal(swa_local_step % n_swa_steps, 0), tf.bool),
-              lambda: swa_local_step.assign(tf.ones_like(swa_local_step)),
-              lambda: swa_local_step.assign_add(1))
-      with tf.control_dependencies([swa_local_step]):
-        do_swa = tf.identity(
-          tf.cast(tf.math.equal(swa_local_step % n_swa_steps, 0), tf.bool), name="do_swa")
-      with tf.control_dependencies([train_op]):
-        swa_op = tf.cond(do_swa,
-              lambda: tf.group(swa.apply(var_list=tvars)),
-              lambda: tf.no_op())
-      train_op = tf.group(train_op, swa_op)
+      # train_op = tf.group(update_op, [global_step.assign(new_global_step)])
+
+  if wa_period is not None:
+    if hvd is None or hvd.rank() == 1:
+      with tf.control_dependencies([update_op]):
+        avg_op = optimizer.apply_average(vars=tvars, global_step=global_step - 1)
+      
+      train_op = train_op.group(update_op, avg_op)
+  
+  train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+
+  # if swa and n_swa_steps:
+  #   if hvd.rank() == 0:
+  #     swa_local_step = tf.get_variable(name="swa_local_step", shape=[],
+  #             dtype=tf.int32, trainable=False, initializer=tf.zeros_initializer)
+  #     swa_local_step = tf.cond(
+  #             tf.cast(tf.math.equal(swa_local_step % n_swa_steps, 0), tf.bool),
+  #             lambda: swa_local_step.assign(tf.ones_like(swa_local_step)),
+  #             lambda: swa_local_step.assign_add(1))
+  #     with tf.control_dependencies([swa_local_step]):
+  #       do_swa = tf.identity(
+  #         tf.cast(tf.math.equal(swa_local_step % n_swa_steps, 0), tf.bool), name="do_swa")
+  #     with tf.control_dependencies([train_op]):
+  #       swa_op = tf.cond(do_swa,
+  #             lambda: tf.group(swa.apply(var_list=tvars)),
+  #             lambda: tf.no_op())
+  #     train_op = tf.group(train_op, swa_op)
   return train_op
 
 def SWAops(model_vars=None):
@@ -299,7 +324,7 @@ class ParamAveragingWrapper(object):
         times = tf.cast(times, tf.float32)
         return (avg_var * times + var) / (times + 1.)
 
-      def average_op(self, vars=None, global_step=None):
+      def apply_average(self, vars=None, global_step=None):
         assignments = []
         steps = tf.cast(global_step, tf.int32)
 
