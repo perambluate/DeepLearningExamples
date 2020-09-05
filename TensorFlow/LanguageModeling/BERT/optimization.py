@@ -27,7 +27,6 @@ from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from horovod.tensorflow.compression import Compression
 import numpy as np
-from swa_tf import StochasticWeightAveraging
 
 def get_optimizer_cls(opt_type):
   return {'tf_adam': tf.compat.v1.train.AdamOptimizer,
@@ -312,8 +311,7 @@ class ParamAveragingWrapper(object):
     # self._avg_vars = {}
   
   def __call__(self, opt):
-    assert isinstance(opt, tf.compat.v1.train.Optimizer),
-          'opt should be the subclass of tf.compat.v1.train.Optimizer'
+    assert isinstance(opt, tf.compat.v1.train.Optimizer), 'opt should be the subclass of tf.compat.v1.train.Optimizer'
     class WrappedOptimizer(opt):
       _start_step = self._start_step
       _avg_period = self._avg_period
