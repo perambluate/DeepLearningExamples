@@ -85,10 +85,10 @@ def get_optimizer(opt_type, learning_rate):
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
     }.get(opt_type, 'adam')
 
-def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-                     optimizer_type="adam", allreduce_post_accumulation=False):
 # def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
-#                      optimizer_type="adam", num_steps_per_swa_update=None, allreduce_post_accumulation=False):
+#                      optimizer_type="adam", allreduce_post_accumulation=False):
+def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None, manual_fp16=False, use_fp16=False, num_accumulation_steps=1,
+                     optimizer_type="adam", allreduce_post_accumulation=False, *, swa=None, n_swa_steps=None):
   """Creates an optimizer training op."""
   global_step = tf.compat.v1.train.get_or_create_global_step()
   
@@ -238,12 +238,22 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
       new_global_step = tf.cond(all_are_finite, lambda: global_step + 1, lambda: global_step)
       new_global_step = tf.identity(new_global_step, name='step_update')
       train_op = tf.group(train_op, [global_step.assign(new_global_step)])
-#   if num_steps_per_swa_update is not None:
-#     swa_local_step = tf.get_variable(name="swa_local_step", shape=[], dtype=tf.int32, trainable=False,
-#                                    initializer=tf.zeros_initializer)
-#     # reset_step = tf.cast(tf.math.equal(swa_local_step % num_steps_per_swa_update, 0), dtype=tf.bool)
-#     if swa_local_step % num_steps_per_swa_update == 0:
-#         return (train_op, SWA_ops(model_vars=tvars))
+  if swa and n_swa_steps:
+    if hvd.rank() == 0:
+      swa_local_step = tf.get_variable(name="swa_local_step", shape=[],
+              dtype=tf.int32, trainable=False, initializer=tf.zeros_initializer)
+      swa_local_step = tf.cond(
+              tf.cast(tf.math.equal(swa_local_step % n_swa_steps, 0), tf.bool),
+              lambda: swa_local_step.assign(tf.ones_like(swa_local_step)),
+              lambda: swa_local_step.assign_add(1))
+      with tf.control_dependencies([swa_local_step]):
+        do_swa = tf.identity(
+          tf.cast(tf.math.equal(swa_local_step % n_swa_steps, 0), tf.bool), name="do_swa")
+      with tf.control_dependencies([train_op]):
+        swa_op = tf.cond(do_swa,
+              lambda: tf.group(swa.apply(var_list=tvars)),
+              lambda: tf.no_op())
+      train_op = tf.group(train_op, swa_op)
   return train_op
 
 def SWAops(model_vars=None):
@@ -263,6 +273,81 @@ def SWAops(model_vars=None):
         # operation to get back values from backup variables to model
         restore_weight_backups = tf.group(*(tf.assign(var, bck.read_value()) for var, bck in zip(model_vars, backup_vars)))
         return (swa_op, swa_to_weights, save_weight_backups, restore_weight_backups)
+
+class ParamAveragingWrapper(object):
+  def __init__(self, start_step=0, avg_period=100, *, name="ParamAveragingWrapper"):
+  # def __init__(self, opt=None, start_step=0, avg_period=100, *, name="ParamAveraging"):
+    # if isinstance(opt, tf.compat.v1.train.Optimizer):
+    #   self._opt = opt
+    # else:
+    #   raise TypeError("opt should be the subclass of tf.compat.v1.train.Optimizer")
+    self._start_step = tf.cast(start_step, tf.int32)
+    self._avg_period = tf.cast(avg_period, tf.int32)
+    self._name = name
+    # self._avg_vars = {}
+  
+  def __call__(self, opt):
+    assert isinstance(opt, tf.compat.v1.train.Optimizer),
+          'opt should be the subclass of tf.compat.v1.train.Optimizer'
+    class WrappedOptimizer(opt):
+      _start_step = self._start_step
+      _avg_period = self._avg_period
+      _name = self._name + '/' + opt.get_name()
+      _avg_vars = {}
+      def averaging(self, var, avg_var, times):
+        ''' compute average value '''
+        times = tf.cast(times, tf.float32)
+        return (avg_var * times + var) / (times + 1.)
+
+      def average_op(self, vars=None, global_step=None):
+        assignments = []
+        steps = tf.cast(global_step, tf.int32)
+
+        if vars is None:
+          vars = tf.trainable_variables()
+
+        for var in vars:
+          if var.ref() not in self._avg_vars:
+            var_name = self._opt._get_variable_name(var.name)
+            average_var = tf.compat.v1.get_variable(
+                name=var_name + "/" + self._name,
+                shape=var.shape.as_list(),
+                trainable=False,
+                initializer=var.initialized_value()
+            )
+            self._avg_vars[var.ref()] = average_var
+          
+          num_snapshots = tf.math.maximum(
+            tf.cast(0, tf.int32),
+            tf.math.floordiv(
+                steps - self._start_step, self._avg_period)
+          )
+
+          do_avg = tf.equal(
+            self._start_step + num_snapshots * self._avg_period, steps)
+          
+          # num_snapshots = tf.cast(num_snapshots, tf.float32)
+          # avg_value = (average_var * num_snapshots + var) / (num_snapshots + 1.0)
+          avg_value = tf.cond(do_avg, lambda: var, self.averaging(var, average_var, num_snapshots))
+          assignments.append(average_var.assign(avg_value))
+        
+        return tf.group(*assignments)
+      
+      def apply_gradients(self, grads_and_vars, global_step=None,
+          name=None, manual_fp16=False):
+        steps = global_step % self._avg_period
+        return super().apply_gradients(grads_and_vars, steps, name, manual_fp16)
+
+    return WrappedOptimizer
+  
+  # def apply_gradients(self, grads_and_vars, global_step=None,
+  #     name=None, manual_fp16=False):
+  #   steps = global_step % self._avg_period
+  #   return self._opt.apply_gradients(
+  #           grads_and_vars=grads_and_vars, 
+  #           global_step=steps,
+  #           name=name,
+  #           manual_fp16=manual_fp16)
 
 class AdamWeightDecayOptimizer(tf.compat.v1.train.Optimizer):
   """A basic Adam optimizer that includes "correct" L2 weight decay."""
