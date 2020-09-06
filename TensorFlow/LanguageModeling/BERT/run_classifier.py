@@ -551,7 +551,7 @@ def main(_):
   num_train_steps = None
   num_warmup_steps = None
   wa_period = None
-  # num_steps_per_epoch = None
+  wa_start_step = None
   training_hooks.append(LogTrainRunHook(global_batch_size, hvd_rank, FLAGS.save_checkpoints_steps, num_steps_ignore_xla=10))
 
   if FLAGS.do_train:
