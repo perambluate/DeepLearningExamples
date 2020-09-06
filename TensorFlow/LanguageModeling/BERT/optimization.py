@@ -258,9 +258,9 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
       with tf.control_dependencies([update_op]):
         avg_op = optimizer.apply_average(vars=tvars, global_step=global_step - 1)
       
-      train_op = train_op.group(update_op, avg_op)
+      update_op = tf.group(update_op, avg_op)
   
-  train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+  train_op = tf.group(update_op, [global_step.assign(new_global_step)])
 
   # if swa and n_swa_steps:
   #   if hvd.rank() == 0:
