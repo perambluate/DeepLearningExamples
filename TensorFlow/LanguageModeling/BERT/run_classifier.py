@@ -396,10 +396,14 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
       #   dummy_op = tf.train.experimental.enable_mixed_precision_graph_rewrite(
       #       optimization.LAMBOptimizer(learning_rate=0.0))
       eval_metric_ops = metric_fn(per_example_loss, label_ids, logits)
+      eval_hooks = []
+      if FLAGS.use_wa:
+        eval_hooks.append(RestoreAveragingWeight(scope="WeightAveraging"))
       output_spec = tf.estimator.EstimatorSpec(
           mode=mode,
           loss=total_loss,
-          eval_metric_ops=eval_metric_ops)
+          eval_metric_ops=eval_metric_ops,
+          evaluation_hooks=eval_hooks)
     else:
       # dummy_op = tf.no_op()
       # Need to call mixed precision graph rewrite if fp16 to enable graph rewrite
@@ -561,6 +565,9 @@ def main(_):
     if FLAGS.use_wa:
       wa_period = int(num_train_steps / FLAGS.wa_epoch)
       wa_start_step = wa_period * FLAGS.wa_start_epoch
+      tf.compat.v1.logging.info("Using Weight Averaging during training time.")
+      tf.compat.v1.logging.info("The averaging period is %d." % wa_period)
+      tf.compat.v1.logging.info("The begining step of weight averaging is %d" % wa_start_step)
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
     start_index = 0
@@ -596,8 +603,8 @@ def main(_):
       config=run_config)
 
   if FLAGS.do_train:
-
-    file_based_convert_examples_to_features(
+    if not all(os.path.isfile(tmp_file) for tmp_file in tmp_filenames):
+      file_based_convert_examples_to_features(
         train_examples[start_index:end_index], label_list, FLAGS.max_seq_length, tokenizer, tmp_filenames[hvd_rank])
 
     tf.compat.v1.logging.info("***** Running training *****")
