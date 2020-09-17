@@ -355,7 +355,7 @@ class ParamAveragingWrapper(object):
             #       initializer=var.initialized_value()
             #   )
             self._avg_vars[var.ref()] = average_var
-            tf.compat.v1.add_to_collection(self._scope, var)
+            tf.compat.v1.add_to_collection(self._scope, average_var)
           else:
             average_var = self._avg_vars[var.ref()]
           
