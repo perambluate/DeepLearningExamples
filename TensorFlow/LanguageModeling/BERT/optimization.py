@@ -163,7 +163,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
   # for select different optimizer provided in TF
 
   if wa_period is not None:
-    PAWrapper = ParamAveragingWrapper(start_step=wa_start_step, avg_period=wa_period, name="WeightAveraging")
+    PAWrapper = ParamAveragingWrapper(start_step=wa_start_step, avg_period=wa_period, scope="WeightAveraging")
     opt_cls = get_optimizer_cls(optimizer_type)
     PA_optimizer = PAWrapper(opt_cls)
     optimizer = PA_optimizer(learning_rate=learning_rate)
@@ -299,7 +299,7 @@ def SWAops(model_vars=None):
         return (swa_op, swa_to_weights, save_weight_backups, restore_weight_backups)
 
 class ParamAveragingWrapper(object):
-  def __init__(self, start_step=0, avg_period=100, *, name="ParamAveragingWrapper"):
+  def __init__(self, start_step=0, avg_period=100, *, scope="ParamAveragingWrapper"):
   # def __init__(self, opt=None, start_step=0, avg_period=100, *, name="ParamAveraging"):
     # if isinstance(opt, tf.compat.v1.train.Optimizer):
     #   self._opt = opt
@@ -307,7 +307,7 @@ class ParamAveragingWrapper(object):
     #   raise TypeError("opt should be the subclass of tf.compat.v1.train.Optimizer")
     self._start_step = tf.cast(start_step, tf.int32)
     self._avg_period = tf.cast(avg_period, tf.int32)
-    self._name = name
+    self._scope = scope
     # self._avg_vars = {}
   
   def __call__(self, opt):
@@ -318,13 +318,12 @@ class ParamAveragingWrapper(object):
     class WrappedOptimizer(opt):
       _start_step = self._start_step
       _avg_period = self._avg_period
-      # _name = self._name + '/' + opt.get_name()
-      wrapper_name = self._name
+      wrapper_name = self._scope
       _avg_vars = {}
       def __init__(self, **kwargs):
         args = [value for key, value in kwargs.items()]
         super(WrappedOptimizer, self).__init__(*args)
-        self._name = self.wrapper_name + '/' + self.get_name()
+        self._scope = self.wrapper_name + '/' + self.get_name()
       def averaging(self, var, avg_var, times):
         ''' compute average value '''
         times = tf.cast(times, tf.float32)
@@ -347,7 +346,7 @@ class ParamAveragingWrapper(object):
                 trainable=False,
                 initializer=var.initialized_value()
             )
-            # with tf.compat.v1.variable_scope(self._name):
+            # with tf.compat.v1.variable_scope(self._scope):
             #   average_var = tf.compat.v1.get_variable(
             #       name=var_name,
             #       shape=var.shape.as_list(),
@@ -356,7 +355,7 @@ class ParamAveragingWrapper(object):
             #       initializer=var.initialized_value()
             #   )
             self._avg_vars[var.ref()] = average_var
-            tf.add_to_collection(self._name, var)
+            tf.compat.v1.add_to_collection(self._scope, var)
           else:
             average_var = self._avg_vars[var.ref()]
           
@@ -373,7 +372,7 @@ class ParamAveragingWrapper(object):
           avg_value = tf.cond(do_avg, lambda: var, self.averaging(var, average_var, num_snapshots))
           assignments.append(average_var.assign(avg_value))
         
-        return tf.group(*assignments, name=self._name)
+        return tf.group(*assignments, name=self._scope)
       
       def apply_gradients(self, grads_and_vars, global_step=None,
           name=None, manual_fp16=False):
