@@ -105,3 +105,54 @@ class SWAUpdateHook(tf.estimator.SessionRunHook):
       run_context.session.run(swa_to_weights)
       
       run_context.session.run(restore_weight_backups)
+
+class RestoreAveragingWeight(tf.estimator.SessionRunHook):
+  # def __init__(self, wa_opt, scope=None):
+  def __init__(self, scope=None):
+    super(RestoreAveragingWeight, self).__init__()
+    # assert hasattr(wa_opt, _avg_vars)
+    # self._opt = wa_opt
+    self._scope = scope
+    # self._restore_op = None
+  
+  def begin(self):
+    # tvars = tf.trainable_variables()
+    wa_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=self._scope)
+    
+    print("***Printing the averaged variables from checkpoint***")
+    for wa_var in wa_vars:
+      tf.compat.v1.print({wa_var.name: wa_var})
+    # for var in tavrs:
+    #   var_name = self._opt._get_variable_name(var.name)
+    #   with tf.compat.v1.variable_scope(self._scope):
+    #     average_var = tf.compat.v1.get_variable(name=var_name)
+    # self._restore_op = tf.assign(v, self._opt.)
+
+class LoggingHook(tf.train.SessionRunHook):
+  def __init__(self, query_dict={}, log_steps=100):
+    self._log_steps = log_steps
+    self._count = 0
+    self._log_names = []
+    self._query_names = []
+    for key, value in query_dict.items():
+      if key is not None and value is not None:
+        self._log_names.append(key)
+        self._query_names.append(value)
+      else:
+        continue
+
+  def begin(self):
+    # self._query_tensors = [tf.get_default_graph().get_tensor_by_name(name) for name in self._query_names]
+    pass
+
+  def before_run(self, run_context):
+    if self._count % self._log_steps == 0:
+      return tf.train.SessionRunArgs(self._query_names)
+    else:
+      pass
+
+  def after_run(self, run_context, run_values):
+    if self._count % self._log_steps == 0:
+      for key, value in zip(self._log_names, run_values.results):
+        print(f"{key}: {value}\n")
+    self._count += 1
