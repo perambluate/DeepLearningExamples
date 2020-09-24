@@ -137,6 +137,39 @@ class AveragingWeightLoggingHook(tf.estimator.SessionRunHook):
         tf.compat.v1.logging.info(f'{name}: {value}')
     self._steps += 1
 
+class AveragingWeightSavingHook(tf.estimator.SessionRunHook):
+  def __init__(self, wa_opt, name_scope=None, saving_period=100):
+    super(AveragingWeightSavingHook, self).__init__()
+    self.wa_opt = wa_opt
+    self._name_scope = name_scope
+    self._logging_period = logging_period
+    self._timer = tf.estimator.SecondOrStepTimer(every_steps=logging_period)
+    self._steps = 0
+  
+  def begin(self):
+    # self._vars = tf.get_collection(self._name_scope)
+    # self._wa_vars_map = self.wa_opt.averaging_var_map()
+    # print(self._wa_vars_map)
+    pass
+
+  def before_run(self, run_context):
+    self._should_trigger = self._timer.should_trigger_for_step(self._steps)
+    if self._should_trigger:
+      self._vars = tf.get_collection(self._name_scope)
+      self._wa_vars_map = self.wa_opt.averaging_var_map(self._vars)
+      self._wa_vars = self._wa_vars_map.keys()
+      return tf.estimator.SessionRunArgs(fetches=self._wa_vars)
+    else:
+      return None
+
+  def after_run(self, run_context, run_values):
+    _ = run_context
+    if self._should_trigger:
+      saving_dict = dict(zip(self._wa_vars, run_values.results))
+      self.ckpt = tf.train.Checkpoint(saving_dict)
+      self.ckpt.save(f'./wa-ckpt-{self._steps}')
+    self._steps += 1
+
 class RestoreAveragingWeight(tf.estimator.SessionRunHook):
   # def __init__(self, wa_opt, scope=None):
   def __init__(self, scope=None):
