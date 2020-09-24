@@ -34,7 +34,7 @@ from utils.utils import *
 # import utils.dllogger_class
 # from dllogger import Verbosity
 from utils.create_glue_data import *
-from optimization.py import WeightAveragingOptimizer
+from optimization import WeightAveragingOptimizer
 import numpy as np
 
 flags = tf.flags
