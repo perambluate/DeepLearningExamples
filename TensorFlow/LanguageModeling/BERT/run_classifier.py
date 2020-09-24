@@ -387,7 +387,7 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           wa_period=wa_period)
       train_hook = []
       if FLAGS.use_wa:
-        wa_opt=WeightAveragingOptimizer(FLAGS.optimizer_type, wa_start_step, wa_period)
+        wa_opt=WeightAveragingOptimizer(learning_rate, FLAGS.optimizer_type, wa_start_step, wa_period)
         train_hook.append(AveragingWeightLoggingHook(wa_opt, logging_period=wa_period))
       output_spec = tf.estimator.EstimatorSpec(
             mode=mode,

@@ -168,7 +168,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
     # PA_optimizer = PAWrapper(opt_cls)
     # optimizer = PA_optimizer(learning_rate=learning_rate)
     print("Using %s optimizer with weight averaging" % optimizer_type)
-    optimizer = WeightAveragingOptimizer(optimizer_type, wa_start_step, wa_period)
+    optimizer = WeightAveragingOptimizer(learning_rate, optimizer_type, wa_start_step, wa_period)
   else:
     print("Using %s optimizer" % optimizer_type)
     optimizer = get_optimizer(optimizer_type, learning_rate)
@@ -300,7 +300,7 @@ def SWAops(model_vars=None):
         restore_weight_backups = tf.group(*(tf.assign(var, bck.read_value()) for var, bck in zip(model_vars, backup_vars)))
         return (swa_op, swa_to_weights, save_weight_backups, restore_weight_backups)
 
-def WeightAveragingOptimizer(optimizer_type, wa_start_step, wa_period):
+def WeightAveragingOptimizer(learning_rate, optimizer_type, wa_start_step, wa_period):
   PAWrapper = ParamAveragingWrapper(start_step=wa_start_step, avg_period=wa_period, name="WeightAveraging")
   opt_cls = get_optimizer_cls(optimizer_type)
   PA_optimizer = PAWrapper(opt_cls)
