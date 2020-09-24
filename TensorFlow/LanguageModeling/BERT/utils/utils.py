@@ -112,7 +112,7 @@ class AveragingWeightLoggingHook(tf.estimator.SessionRunHook):
     self.wa_opt = wa_opt
     # self._name_scope = name_scope
     self._logging_period = logging_period
-    self._timer = tf.estimator.LoggingTensorHook(every_steps=logging_period)
+    self._timer = tf.estimator.SecondOrStepTimer(every_steps=logging_period)
     self._steps = 0
   
   def begin(self):
