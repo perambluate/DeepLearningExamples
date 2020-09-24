@@ -34,6 +34,7 @@ from utils.utils import *
 # import utils.dllogger_class
 # from dllogger import Verbosity
 from utils.create_glue_data import *
+from optimization.py import WeightAveragingOptimizer
 import numpy as np
 
 flags = tf.flags
@@ -384,11 +385,15 @@ def model_fn_builder(task_name, bert_config, num_labels, init_checkpoint, learni
           hvd, False, FLAGS.amp, FLAGS.num_accumulation_steps, FLAGS.optimizer_type,
           wa_start_step=wa_start_step,
           wa_period=wa_period)
-
+      train_hook = []
+      if FLAGS.use_wa:
+        wa_opt=WeightAveragingOptimizer(FLAGS.optimizer_type, wa_start_step, wa_period)
+        train_hook.append(AveragingWeightLoggingHook(wa_opt, logging_period=wa_period))
       output_spec = tf.estimator.EstimatorSpec(
             mode=mode,
             loss=total_loss,
-            train_op=train_op)
+            train_op=train_op,
+            training_hooks=train_hook)
     elif mode == tf.estimator.ModeKeys.EVAL:
       # dummy_op = tf.no_op()
       # Need to call mixed precision graph rewrite if fp16 to enable graph rewrite

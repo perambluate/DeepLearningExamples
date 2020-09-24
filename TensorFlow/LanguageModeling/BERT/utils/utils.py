@@ -106,6 +106,34 @@ class SWAUpdateHook(tf.estimator.SessionRunHook):
       
       run_context.session.run(restore_weight_backups)
 
+class AveragingWeightLoggingHook(tf.estimator.SessionRunHook):
+  def __init__(self, wa_opt, name_scope=None, logging_period=100):
+    super(AveragingWeightLoggingHook, self).__init__()
+    self.wa_opt = wa_opt
+    self._name_scope = name_scope
+    self._logging_period = logging_period
+    self._timer = tf.estimator.LoggingTensorHook(every_steps=logging_period)
+    self._steps = 0
+  
+  def begin(self):
+    self._vars = tf.get_collection(self._name_scope)
+    self._wa_vars_map = self.wa_opt.averaging_var_map(self._vars)
+    print(self._wa_vars_map)
+
+  def before_run(self, run_context):
+    self._should_trigger = self._timer.should_trigger_for_step(self._steps)
+    if self._should_trigger:
+      return tf.estimator.SessionRunArgs(fetches=self._wa_vars_map)
+    else:
+      return None
+
+  def after_run(self, run_context, run_values):
+    _ = run_context
+    if self._should_trigger:
+      for name, value in run_values.results.items:
+        tf.compat.v1.logging.info(f'{name}: {value}')
+    self._steps += 1
+
 class RestoreAveragingWeight(tf.estimator.SessionRunHook):
   # def __init__(self, wa_opt, scope=None):
   def __init__(self, scope=None):
