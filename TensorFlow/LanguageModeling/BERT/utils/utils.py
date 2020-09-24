@@ -117,12 +117,15 @@ class AveragingWeightLoggingHook(tf.estimator.SessionRunHook):
   
   def begin(self):
     # self._vars = tf.get_collection(self._name_scope)
-    self._wa_vars_map = self.wa_opt.averaging_var_map()
-    print(self._wa_vars_map)
+    # self._wa_vars_map = self.wa_opt.averaging_var_map()
+    # print(self._wa_vars_map)
+    pass
 
   def before_run(self, run_context):
     self._should_trigger = self._timer.should_trigger_for_step(self._steps)
     if self._should_trigger:
+      self._wa_vars_map = self.wa_opt.averaging_var_map()
+      # print(f'map between vars and wa_vars: {self._wa_vars_map}')
       return tf.estimator.SessionRunArgs(fetches=self._wa_vars_map)
     else:
       return None
@@ -130,7 +133,7 @@ class AveragingWeightLoggingHook(tf.estimator.SessionRunHook):
   def after_run(self, run_context, run_values):
     _ = run_context
     if self._should_trigger:
-      for name, value in run_values.results.items:
+      for name, value in run_values.results.items():
         tf.compat.v1.logging.info(f'{name}: {value}')
     self._steps += 1
 
