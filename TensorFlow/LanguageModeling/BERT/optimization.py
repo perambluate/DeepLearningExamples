@@ -347,7 +347,7 @@ class ParamAveragingWrapper(object):
 
         for var in vars:
           if var.ref() not in self._avg_vars:
-            # var_name = self._opt._get_variable_name(var.name)
+            var_name = self._opt._get_variable_name(var.name)
             var_name = var.name + "/" + self._name
             # with tf.compat.v1.variable_scope(self._name):
             #   average_var = tf.compat.v1.get_variable(
