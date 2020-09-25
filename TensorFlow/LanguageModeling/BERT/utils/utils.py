@@ -142,8 +142,8 @@ class AveragingWeightSavingHook(tf.estimator.SessionRunHook):
     super(AveragingWeightSavingHook, self).__init__()
     self.wa_opt = wa_opt
     self._name_scope = name_scope
-    self._logging_period = logging_period
-    self._timer = tf.estimator.SecondOrStepTimer(every_steps=logging_period)
+    self._logging_period = saving_period
+    self._timer = tf.estimator.SecondOrStepTimer(every_steps=saving_period)
     self._steps = 0
   
   def begin(self):

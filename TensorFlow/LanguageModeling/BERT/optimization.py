@@ -349,13 +349,6 @@ class ParamAveragingWrapper(object):
           if var.ref() not in self._avg_vars:
             # var_name = self._opt._get_variable_name(var.name)
             var_name = var.name + "/" + self._name
-            average_var = tf.compat.v1.get_variable(
-                name=var_name,
-                shape=var.shape.as_list(),
-                dtype=var.dtype,
-                trainable=False,
-                initializer=var.initialized_value()
-            )
             # with tf.compat.v1.variable_scope(self._name):
             #   average_var = tf.compat.v1.get_variable(
             #       name=var_name,
@@ -364,8 +357,15 @@ class ParamAveragingWrapper(object):
             #       trainable=False,
             #       initializer=var.initialized_value()
             #   )
-            # self._avg_vars[var.ref()] = average_var
-            # tf.compat.v1.add_to_collection(self._name, var)
+            average_var = tf.compat.v1.get_variable(
+                name=var_name,
+                shape=var.shape.as_list(),
+                dtype=var.dtype,
+                trainable=False,
+                initializer=var.initialized_value()
+            )
+            self._avg_vars[var.ref()] = average_var
+            tf.compat.v1.add_to_collection(self._name, var)
           else:
             average_var = self._avg_vars[var.ref()]
           
