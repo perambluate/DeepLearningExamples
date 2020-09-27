@@ -259,6 +259,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
     if hvd is None or hvd.rank() == 1:
       with tf.control_dependencies([update_op]):
         avg_op = optimizer.apply_average(vars=tvars, global_step=global_step)
+        optimizer.saving_average_vars(global_step)
       
       update_op = tf.group(update_op, avg_op)
   
@@ -317,7 +318,7 @@ class ParamAveragingWrapper(object):
     self._start_step = tf.cast(start_step, tf.int32)
     self._avg_period = tf.cast(avg_period, tf.int32)
     self._name = name
-    # self._avg_vars = {}
+    # self._avg_var_map = {}
   
   def __call__(self, opt):
     if not issubclass(opt, tf.compat.v1.train.Optimizer):
@@ -328,11 +329,12 @@ class ParamAveragingWrapper(object):
       _start_step = self._start_step
       _avg_period = self._avg_period
       wrapper_name = self._name
-      _avg_vars = {}
-      def __init__(self, **kwargs):
+      def __init__(self, *, scope="averaging", **kwargs):
         args = [value for key, value in kwargs.items()]
         super(WrappedOptimizer, self).__init__(*args)
         self._name = self.wrapper_name + '/' + self.get_name()
+        self._avg_var_map = {}
+        self._scope = scope
       def averaging(self, var, avg_var, times):
         ''' compute average value '''
         times = tf.cast(times, tf.float32)
@@ -346,28 +348,28 @@ class ParamAveragingWrapper(object):
           vars = tf.trainable_variables()
 
         for var in vars:
-          if var.ref() not in self._avg_vars:
-            var_name = self._opt._get_variable_name(var.name)
-            var_name = var.name + "/" + self._name
-            # with tf.compat.v1.variable_scope(self._name):
-            #   average_var = tf.compat.v1.get_variable(
-            #       name=var_name,
-            #       shape=var.shape.as_list(),
-            #       dtype=var.dtype,
-            #       trainable=False,
-            #       initializer=var.initialized_value()
-            #   )
-            average_var = tf.compat.v1.get_variable(
-                name=var_name,
-                shape=var.shape.as_list(),
-                dtype=var.dtype,
-                trainable=False,
-                initializer=var.initialized_value()
-            )
-            self._avg_vars[var.ref()] = average_var
-            tf.compat.v1.add_to_collection(self._name, var)
+          var_name = self._opt._get_variable_name(var.name)
+          if var_name not in self._avg_var_map:
+            # var_name += "/averaging"
+            with tf.compat.v1.variable_scope(self._scope):
+              average_var = tf.compat.v1.get_variable(
+                  name=var_name + f"/{self._scope}",
+                  shape=var.shape.as_list(),
+                  dtype=var.dtype,
+                  trainable=False,
+                  initializer=var.initialized_value()
+              )
+            # average_var = tf.compat.v1.get_variable(
+            #     name=var_name,
+            #     shape=var.shape.as_list(),
+            #     dtype=var.dtype,
+            #     trainable=False,
+            #     initializer=var.initialized_value()
+            # )
+            self._avg_var_map[var_name] = average_var
+            # tf.compat.v1.add_to_collection(self._scope, avg_var)
           else:
-            average_var = self._avg_vars[var.ref()]
+            average_var = self._avg_var_map[var_name]
           
           num_snapshots = tf.math.maximum(
             tf.cast(0, tf.int32),
@@ -391,7 +393,7 @@ class ParamAveragingWrapper(object):
             grads_and_vars, global_step=steps, name=name, manual_fp16=manual_fp16)
 
       def average(self, var):
-        return self._avg_vars[var.ref(), None]
+        return self._avg_var_map[self._opt._get_variable_name(var.name)]
 
       def averaging_var_map(self, avg_vars=None):
         name_map = {}
@@ -399,7 +401,7 @@ class ParamAveragingWrapper(object):
           # Include trainable variables and variables which have been explicitly
           # added to the moving_average_variables collection.
           # avg_vars = tf.trainable_variables()
-          avg_vars = tf.get_collection(self._name)
+          avg_vars = tf.get_collection(self._scope)
         # Remove duplicates
         avg_vars = set(avg_vars)
         # Collect all the variables with moving average,
@@ -411,6 +413,15 @@ class ParamAveragingWrapper(object):
           if v.name not in moving_avg_variable_names and v.name not in name_map:
             name_map[v.name] = v
         return name_map
+      
+      def saving_average_vars(self, step, ckpt_name='avg-ckpt'):
+        avg_vars = tf.get_collection(self._scope)
+        # trans_avg_var_map = dict(
+        #   zip(self._avg_var_map.values(), self._avg_var_map.keys()))
+        
+        saving_dict = {f'{var}': var for var in avg_vars}
+        ckpt = tf.train.Checkpoint(**saving_dict)
+        ckpt.save(f'./{ckpt_name}-{step}')
 
     return WrappedOptimizer
   
