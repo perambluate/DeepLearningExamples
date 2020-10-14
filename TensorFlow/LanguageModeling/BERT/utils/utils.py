@@ -142,31 +142,35 @@ class AveragingWeightSavingHook(tf.estimator.SessionRunHook):
     super(AveragingWeightSavingHook, self).__init__()
     self.wa_opt = wa_opt
     self._name_scope = name_scope
-    self._logging_period = saving_period
-    self._timer = tf.estimator.SecondOrStepTimer(every_steps=saving_period)
+    self._saving_period = saving_period
+    # self._timer = tf.compat.v1.estimator.SecondOrStepTimer(
+    #               every_steps=saving_period)
     self._steps = 0
   
   def begin(self):
-    # self._vars = tf.get_collection(self._name_scope)
-    # self._wa_vars_map = self.wa_opt.averaging_var_map()
-    # print(self._wa_vars_map)
+    # self._timer.reset()
     pass
 
   def before_run(self, run_context):
-    self._should_trigger = self._timer.should_trigger_for_step(self._steps)
-    if self._should_trigger:
-      self._vars = tf.get_collection(self._name_scope)
-      self._wa_vars_map = self.wa_opt.averaging_var_map(self._vars)
-      self._wa_vars = self._wa_vars_map.keys()
+    # self._should_trigger = self._timer.should_trigger_for_step(self._steps)
+    self._do_saving = self._steps == self._saving_period
+    if self._steps > 0 and self._do_saving:
+      print(f'saving at step {self._steps}')
+      tf.compat.v1.logging.info(f'tf: saving at step {self._steps}')
+      self._wa_vars = tf.get_collection(self._name_scope)
+      # self._wa_vars_map = self.wa_opt.averaging_var_map(self._vars)
+      # self._wa_vars = self._wa_vars_map.values()
+      # if self._wa_vars.len() > 0:
+      #   tf.compat.v1.logging.info(f'first variable in wa_vars: {self._wa_vars[0]}')
       return tf.estimator.SessionRunArgs(fetches=self._wa_vars)
     else:
       return None
 
   def after_run(self, run_context, run_values):
     _ = run_context
-    if self._should_trigger:
+    if self._steps > 0 and self._do_saving:
       saving_dict = dict(zip(self._wa_vars, run_values.results))
-      self.ckpt = tf.train.Checkpoint(saving_dict)
+      self.ckpt = tf.train.Checkpoint(**saving_dict)
       self.ckpt.save(f'./wa-ckpt-{self._steps}')
     self._steps += 1
 
