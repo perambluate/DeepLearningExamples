@@ -162,16 +162,16 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
   
   # for select different optimizer provided in TF
 
+  print("Using %s optimizer" % optimizer_type)
+  optimizer = get_optimizer(optimizer_type, learning_rate)
+  
   if wa_period is not None:
-    # PAWrapper = ParamAveragingWrapper(start_step=wa_start_step, avg_period=wa_period, name="WeightAveraging")
-    # opt_cls = get_optimizer_cls(optimizer_type)
-    # PA_optimizer = PAWrapper(opt_cls)
-    # optimizer = PA_optimizer(learning_rate=learning_rate)
-    print("Using %s optimizer with weight averaging" % optimizer_type)
-    optimizer = WeightAveragingOptimizer(learning_rate, optimizer_type, wa_start_step, wa_period)
-  else:
-    print("Using %s optimizer" % optimizer_type)
-    optimizer = get_optimizer(optimizer_type, learning_rate)
+    print("Doing Weight Averaging")
+    # optimizer = WeightAveragingOptimizer(learning_rate, optimizer_type, wa_start_step, wa_period)
+    WA = WeightAveragingWrapper(optimizer, wa_start_step, wa_period)
+  # else:
+  #   print("Using %s optimizer" % optimizer_type)
+  #   optimizer = get_optimizer(optimizer_type, learning_rate)
 
   if hvd is not None and (num_accumulation_steps == 1 or (not allreduce_post_accumulation)):
     optimizer = hvd.DistributedOptimizer(optimizer, sparse_as_dense=True, compression=Compression.fp16 if use_fp16 or manual_fp16 else Compression.none)
@@ -256,12 +256,13 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, hvd=None,
       # train_op = tf.group(update_op, [global_step.assign(new_global_step)])
 
   if wa_period is not None:
-    if hvd is None or hvd.rank() == 1:
-      with tf.control_dependencies([update_op]):
-        avg_op = optimizer.apply_average(vars=tvars, global_step=global_step)
-        optimizer.saving_average_vars(global_step)
+    # if hvd is None or hvd.rank() == 1:
+    with tf.control_dependencies([update_op]):
+      tf.compat.v1.logging.info(f"doing wa at step {global_step}")
+      avg_op = WA.apply_average(vars=tvars, global_step=global_step)
+      avg_saving_op = WA.saving_average_vars(global_step)
       
-      update_op = tf.group(update_op, avg_op)
+    update_op = tf.group(update_op, avg_op, avg_saving_op)
   
   train_op = tf.group(update_op, [global_step.assign(new_global_step)])
 
@@ -359,15 +360,7 @@ class ParamAveragingWrapper(object):
                   trainable=False,
                   initializer=var.initialized_value()
               )
-            # average_var = tf.compat.v1.get_variable(
-            #     name=var_name,
-            #     shape=var.shape.as_list(),
-            #     dtype=var.dtype,
-            #     trainable=False,
-            #     initializer=var.initialized_value()
-            # )
             self._avg_var_map[var_name] = average_var
-            # tf.compat.v1.add_to_collection(self._scope, avg_var)
           else:
             average_var = self._avg_var_map[var_name]
           
@@ -392,7 +385,95 @@ class ParamAveragingWrapper(object):
         return super(WrappedOptimizer, self).apply_gradients(
             grads_and_vars, global_step=steps, name=name, manual_fp16=manual_fp16)
 
-      def average(self, var):
+      def average_variable(self, var):
+        return self._avg_var_map[self._opt._get_variable_name(var.name)]
+
+      def averaging_var_map(self, avg_vars=None):
+        name_map = {}
+        if avg_vars is None:
+          # Include trainable variables and variables which have been explicitly
+          # added to the moving_average_variables collection.
+          # avg_vars = tf.trainable_variables()
+          avg_vars = tf.get_collection(self._scope)
+        # Remove duplicates
+        avg_vars = set(avg_vars)
+        # Collect all the variables with moving average,
+        for v in avg_vars:
+          name_map[self.average_name(v)] = v
+        # Make sure we restore variables without moving averages as well.
+        moving_avg_variable_names = set(v.name for v in avg_vars)
+        for v in list(set(tf.global_variables())):
+          if v.name not in moving_avg_variable_names and v.name not in name_map:
+            name_map[v.name] = v
+        return name_map
+      
+      def saving_average_vars(self, step, ckpt_name='avg-ckpt'):
+        avg_vars = tf.get_collection(self._scope)
+        # trans_avg_var_map = dict(
+        #   zip(self._avg_var_map.values(), self._avg_var_map.keys()))
+        
+        saving_dict = {f'{var}': var for var in avg_vars}
+        ckpt = tf.train.Checkpoint(**saving_dict)
+        return ckpt.save(f'./{ckpt_name}-{step}')
+
+    return WrappedOptimizer
+
+def WeightAveragingWrapper(opt, start_step, avg_period, name="WeightAveraging"):
+    class WeightAveraging(object):
+      _start_step = tf.cast(start_step, tf.int32)
+      _avg_period = tf.cast(avg_period, tf.int32)
+      wrapper_name = name
+      _opt = opt
+      def __init__(self, *, scope="averaging", **kwargs):
+        args = [value for key, value in kwargs.items()]
+        super(WeightAveraging, self).__init__(*args)
+        self._name = self.wrapper_name + '/' + self._opt.get_name()
+        self._avg_var_map = {}
+        self._scope = scope
+
+      def apply_average(self, vars=None, global_step=None):
+        assignments = []
+        steps = tf.cast(global_step, tf.int32)
+
+        if vars is None:
+          vars = tf.trainable_variables()
+
+        for var in vars:
+          var_name = self._opt._get_variable_name(var.name)
+          if var_name not in self._avg_var_map:
+            # var_name += "/averaging"
+            # with tf.compat.v1.variable_scope(self._scope):
+            average_var = tf.compat.v1.get_variable(
+                  name=var_name + f"/{self._scope}",
+                  dtype=var.dtype,
+                  trainable=False,
+                  initializer=var.initialized_value()
+              )
+            tf.compat.v1.add_to_collection(self._scope)
+            self._avg_var_map[var_name] = average_var
+          else:
+            average_var = self._avg_var_map[var_name]
+          
+          num_snapshots = tf.math.maximum(
+            tf.cast(0, tf.int32),
+            tf.math.floordiv(
+                steps - self._start_step, self._avg_period)
+          )
+
+          do_avg = tf.equal(
+            self._start_step + num_snapshots * self._avg_period, steps)
+          # num_snapshots = tf.cast(num_snapshots, tf.float32)
+          # avg_value = (average_var * num_snapshots + var) / (num_snapshots + 1.0)
+          def averaging(var, avg_var, times):
+            ''' compute average value '''
+            times = tf.cast(times, tf.float32)
+            return tf.cast((avg_var * times + var) / (times + 1.), var.dtype)
+          avg_value = tf.cond(do_avg, lambda: var, lambda: averaging(var, average_var, num_snapshots))
+          assignments.append(average_var.assign(avg_value))
+        
+        return tf.group(*assignments, name=self._name)
+
+      def average_variable(self, var):
         return self._avg_var_map[self._opt._get_variable_name(var.name)]
 
       def averaging_var_map(self, avg_vars=None):
@@ -423,16 +504,8 @@ class ParamAveragingWrapper(object):
         ckpt = tf.train.Checkpoint(**saving_dict)
         ckpt.save(f'./{ckpt_name}-{step}')
 
-    return WrappedOptimizer
-  
-  # def apply_gradients(self, grads_and_vars, global_step=None,
-  #     name=None, manual_fp16=False):
-  #   steps = global_step % self._avg_period
-  #   return self._opt.apply_gradients(
-  #           grads_and_vars=grads_and_vars, 
-  #           global_step=steps,
-  #           name=name,
-  #           manual_fp16=manual_fp16)
+    return WeightAveraging()
+
 
 class AdamWeightDecayOptimizer(tf.compat.v1.train.Optimizer):
   """A basic Adam optimizer that includes "correct" L2 weight decay."""
