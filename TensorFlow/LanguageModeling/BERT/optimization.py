@@ -59,7 +59,7 @@ def get_optimizer(opt_type, learning_rate):
           beta_2=0.999,
           epsilon=1e-6,
           exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]),
-        'amsgrad': NAdaMaxOptimizer(
+        'amsgrad': AMSGradOptimizer(
           learning_rate=learning_rate,
           weight_decay_rate=0.01,
           beta_1=0.9,
@@ -639,7 +639,7 @@ class AMSGradOptimizer(AdamWeightDecayOptimizer):
                                                     tf.square(grad)))
       next_v_hat = tf.maximum(next_v, v_hat)
 
-      update = next_m / (tf.sqrt(next_v) + self.epsilon) / (1 - self.beta_1 ** steps)
+      update = next_m / (tf.sqrt(next_v_hat) + self.epsilon) / (1 - self.beta_1 ** steps)
 
       # Just adding the square of the weights to the loss function is *not*
       # the correct way of using L2 regularization/weight decay with AMSGrad,
